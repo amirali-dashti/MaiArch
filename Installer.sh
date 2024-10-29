@@ -6,6 +6,12 @@ if ! command -v dialog &> /dev/null; then
   sudo pacman -Sy --noconfirm dialog
 fi
 
+# Install GParted if not present
+if ! command -v gparted &> /dev/null; then
+  echo "Installing GParted for partitioning..."
+  sudo pacman -Sy --noconfirm gparted
+fi
+
 LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Changed log file name to include MaiArch
 ROLLBACK_STACK=()
 
@@ -49,13 +55,14 @@ function select_disk() {
   fi
 }
 
-# Partition disk with LVM
+# Partition disk with LVM or GParted
 function partition_disk() {
-  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically or manually. If you choose to partition automatically, it will erase all data on the disk." 8 70
+  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically, manually, or using GParted. If you choose to partition automatically, it will erase all data on the disk." 10 80
 
-  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 50 2 \
+  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 60 3 \
     1 "Automatically partition the entire disk" \
-    2 "Manually partition the disk using cfdisk" 3>&1 1>&2 2>&3)
+    2 "Manually partition the disk using cfdisk" \
+    3 "Use GParted for partitioning" 3>&1 1>&2 2>&3)
 
   case "$PARTITION_OPTION" in
     1)
@@ -77,11 +84,24 @@ function partition_disk() {
       dialog --title "Manual Partitioning" --msgbox "Please partition your disk manually using cfdisk, then press OK to continue." 8 50
       cfdisk "$DISK"
       ;;
+    3)
+      partition_disk_with_gparted  # Call the GParted function
+      ;;
     *)
       dialog --title "Error" --msgbox "Invalid option selected." 6 40
       exit 1
       ;;
   esac
+}
+
+# Function to partition disk using GParted
+function partition_disk_with_gparted() {
+  dialog --title "Manual Partitioning" --msgbox "You can now use GParted to partition your disk. Please perform your actions and close the application when done." 10 80
+  gparted "$DISK"  # Launch GParted for the user
+  if [[ $? -ne 0 ]]; then
+    dialog --title "Error" --msgbox "Failed to launch GParted. Please install it manually." 8 50
+    exit 1
+  fi
 }
 
 # Format partitions with validation and rollback on failure
