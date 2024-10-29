@@ -1,11 +1,6 @@
 #!/bin/bash
 
-# Synopsys: This script installs a base Arch Linux system on a specified disk.
-
-# Proper usage: 
-# wget https://raw.githubusercontent.com/portalmaster137/ArchyBootstrapper/main/booter.sh 
-# chmod +x booter.sh 
-# ./booter.sh
+# Synopsys: This script installs a base Arch Linux system with user interaction.
 
 # Install necessary packages if not present
 command -v dialog &> /dev/null || sudo pacman -Sy --noconfirm dialog
@@ -51,9 +46,10 @@ select_disk() {
     disk_options=()
     while IFS= read -r line; do
         disk_name=$(echo "$line" | awk '{print $1}')
-        disk_size=$(echo "$line" | awk '{print $4}')
+        disk_size=$(echo "$line" | awk '{print $2}')
         disk_options+=("$disk_name" "$disk_size")
     done < <(lsblk -dpno NAME,SIZE | grep -E "/dev/sd|/dev/nvme|/dev/vd")
+    
     DISK=$(dialog --title "Disk Selection" --menu "Choose the disk to install to:" 15 50 4 "${disk_options[@]}" 3>&1 1>&2 2>&3)
     
     if [ -z "$DISK" ]; then
@@ -126,52 +122,29 @@ fi
 dialog --title "Info" --msgbox "Generating fstab..." 8 40
 genfstab -U /mnt >> /mnt/etc/fstab
 
-dialog --title "Info" --msgbox "Disk $DISK has been successfully partitioned and mounted." 8 50
-
-## STAGE 2 : UPDATE MIRRORLIST WITH RETRIES AND FALLBACK ##
-
-# Function to update mirrors with retry logic and fallback
+## STAGE 3 : UPDATE MIRRORLIST ##
+# Use default method with rankmirrors
 update_mirrors() {
-    local attempts=5       # Number of attempts for retries
-    local wait_time=5      # Initial wait time between retries
-    local success=false    # Track if update succeeds
-
-    for ((i=1; i<=attempts; i++)); do
-        echo "Attempt $i to update mirrors..."
-        if reflector --latest 200 --protocol https --sort rate --save /etc/pacman.d/mirrorlist; then
-            success=true
-            dialog --title "Info" --msgbox "Mirror list updated successfully." 8 40
-            break
-        else
-            echo "Mirror update failed. Retrying in $wait_time seconds..."
-            sleep "$wait_time"
-            wait_time=$((wait_time * 2))
-        fi
-    done
-
-    if [ "$success" = false ]; then
-        echo "Failed to update mirrors after $attempts attempts."
-        echo "Using fallback mirror list."
-        echo "Server = https://mirrors.edge.kernel.org/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
-        dialog --title "Warning" --msgbox "Mirror list update failed. Using fallback mirror." 8 50
+    cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+    rankmirrors -n 6 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
+    if [ $? -eq 0 ]; then
+        dialog --title "Info" --msgbox "Mirror list updated successfully using rankmirrors." 8 40
+    else
+        cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
+        dialog --title "Warning" --msgbox "Failed to rank mirrors. Restored original mirror list." 8 50
     fi
 }
-
-# Call the function to update mirrors
 update_mirrors
 
-## STAGE 3 : INSTALLATION ##
+## STAGE 4 : INSTALLATION ##
 dialog --title "Info" --msgbox "Installing base system..." 8 40
 if ! pacstrap -k /mnt base linux linux-firmware sof-firmware NetworkManager vim nano sudo grub efibootmgr elinks git; then
     dialog --title "Error" --msgbox "Base system installation failed.\nExiting..." 8 60
     exit 1
 fi
-
 dialog --title "Info" --msgbox "Base system installed successfully." 8 40
 
-## STAGE 4 : SYSTEM CONFIGURATION ##
-dialog --title "Info" --msgbox "Performing final configuration..." 8 40
-
+## STAGE 5 : SYSTEM CONFIGURATION ##
 arch-chroot /mnt /bin/bash <<EOF
 echo "$HOSTNAME" > /etc/hostname
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
