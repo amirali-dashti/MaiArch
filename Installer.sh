@@ -9,13 +9,12 @@ function error_exit {
 # Function to collect user input with validation
 function collect_input {
     local prompt="$1"
-    local title="$2"
     local input_var
 
     while true; do
         input_var=$(dialog --inputbox "$prompt" 8 40 3>&1 1>&2 2>&3)
         if [[ $? -ne 0 ]]; then
-            error_exit "$title cancelled."
+            error_exit "$prompt cancelled."
         fi
 
         # Validate input (non-empty)
@@ -72,14 +71,6 @@ function collect_package_selection {
     echo "$packages"
 }
 
-# Function to check if the directory is writable
-function check_writable {
-    local path="$1"
-    if [[ ! -w "$path" ]]; then
-        error_exit "The path '$path' is not writable. Please choose another location."
-    fi
-}
-
 # Collect disk selection
 disk=$(collect_menu_selection "Disk Selection" "Select a disk to install Arch Linux:" "4 \
 1 "/dev/sda" \
@@ -88,7 +79,7 @@ disk=$(collect_menu_selection "Disk Selection" "Select a disk to install Arch Li
 4 "Exit"")
 
 # Collect username
-username=$(collect_input "Enter your username:" "Username entry")
+username=$(collect_input "Enter your username:")
 
 # Collect password
 password=$(collect_password "Enter your password:")
@@ -120,27 +111,25 @@ packages=$(collect_package_selection "Package Selection" "Select additional pack
 # Convert selected packages to JSON format
 packages_list=$(echo "$packages" | tr '\n' ',' | sed 's/,$//')
 
-# Prompt for JSON file save path
-config_path=$(collect_input "Enter the path to save the configuration file:" "Path entry")
+# Set default config path for saving JSON
+config_path="$HOME/install_config.json"
 
-# Check if the directory is writable
-check_writable "$(dirname "$config_path")"
-
-# Create the JSON structure
-json_content=$(cat <<EOF
+# Create the JSON structure and save to file
 {
-  "disk": "$disk",
-  "username": "$username",
-  "password": "$password",
-  "timezone": "$timezone",
-  "language": "$language",
-  "packages": [$packages_list]
-}
-EOF
-)
+  echo "{"
+  echo "  \"disk\": \"$disk\","
+  echo "  \"username\": \"$username\","
+  echo "  \"password\": \"$password\","
+  echo "  \"timezone\": \"$timezone\","
+  echo "  \"language\": \"$language\","
+  echo "  \"packages\": [$packages_list]"
+  echo "}"
+} > "$config_path"
 
-# Save to the specified JSON file
-echo "$json_content" > "$config_path"
+# Check if the JSON file was created successfully
+if [[ $? -ne 0 ]]; then
+    error_exit "Failed to save configuration to $config_path."
+fi
 
 # Inform the user
 dialog --msgbox "Configuration saved to $config_path" 5 40
