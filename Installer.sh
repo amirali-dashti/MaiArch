@@ -10,6 +10,9 @@
 # Install dialog if not present
 command -v dialog &> /dev/null || sudo pacman -Sy --noconfirm dialog
 
+# Clear the screen for a clean start
+clear
+
 ## STAGE 1 : CONFIGURATION ##
 
 # Determine if the system is UEFI or BIOS.
@@ -18,7 +21,7 @@ UEFI=False
 
 if [ -d "/sys/firmware/efi/efivars" ]; then
     if [ "$(cat /sys/firmware/efi/fw_platform_size)" -eq 32 ]; then
-        dialog --title "Error" --msgbox "32-bit UEFI systems are not supported by this installer. Exiting." 8 60
+        dialog --title "Error" --msgbox "32-bit UEFI systems are not supported by this installer.\nExiting..." 8 60
         exit 1
     fi
     UEFI=True
@@ -30,7 +33,7 @@ fi
 
 # Check for internet connection.
 if ! ping -c 1 google.com &> /dev/null; then
-    dialog --title "Error" --msgbox "No internet connection detected. Please connect and try again." 8 60
+    dialog --title "Error" --msgbox "No internet connection detected.\nPlease connect and try again." 8 60
     exit 1
 fi
 
@@ -38,9 +41,9 @@ fi
 lsblk
 
 # Prompt for installation disk
-DISK=$(dialog --title "Select Disk" --inputbox "Enter the disk to install to (e.g., /dev/sda, /dev/nvme0n1):" 8 60 3>&1 1>&2 2>&3)
+DISK=$(dialog --title "Disk Selection" --inputbox "Enter the disk to install to (e.g., /dev/sda):" 8 60 3>&1 1>&2 2>&3)
 if [ ! -b "$DISK" ]; then
-    dialog --title "Error" --msgbox "Disk $DISK does not exist. Please rerun the script." 8 60
+    dialog --title "Error" --msgbox "Disk $DISK does not exist.\nPlease rerun the script." 8 60
     exit 1
 fi
 
@@ -59,9 +62,8 @@ done
 ## STAGE 2 : PARTITIONING ##
 
 # Confirmation before partitioning
-CONFIRM=$(dialog --title "Confirmation" --yesno "The following disk will be partitioned: $DISK\nThis will erase all data on the disk.\n\nAre you sure you want to continue?" 10 60)
-if [ $? -ne 0 ]; then
-    dialog --title "Aborted" --msgbox "Aborting." 6 30
+if ! dialog --title "Confirmation" --yesno "You are about to partition the disk: $DISK\nThis will erase all data on the disk.\n\nAre you sure you want to continue?" 10 60; then
+    dialog --title "Aborted" --msgbox "Aborting the installation." 6 30
     exit 1
 fi
 
@@ -99,22 +101,22 @@ else
     mount --mkdir "${DISK}1" /mnt/boot
 fi
 
-dialog --title "Info" --msgbox "Generating fstab." 8 40
+dialog --title "Info" --msgbox "Generating fstab..." 8 40
 genfstab -U /mnt >> /mnt/etc/fstab
 
-dialog --title "Info" --msgbox "Disk $DISK has been partitioned and mounted." 8 50
+dialog --title "Info" --msgbox "Disk $DISK has been successfully partitioned and mounted." 8 50
 
-dialog --title "Info" --msgbox "Updating Mirrorlist." 8 40
+dialog --title "Info" --msgbox "Updating Mirrorlist..." 8 40
 reflector --latest 200 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 
 
 ## STAGE 3 : INSTALLATION ##
-dialog --title "Info" --msgbox "Installing base system." 8 40
+dialog --title "Info" --msgbox "Installing base system..." 8 40
 pacstrap -k /mnt base linux linux-firmware sof-firmware NetworkManager vim nano sudo grub efibootmgr elinks git reflector
 
-dialog --title "Info" --msgbox "Base system installed." 8 40
+dialog --title "Info" --msgbox "Base system installed successfully." 8 40
 
 ## STAGE 4 : SYSTEM CONFIGURATION ##
-dialog --title "Info" --msgbox "Performing final configuration." 8 40
+dialog --title "Info" --msgbox "Performing final configuration..." 8 40
 
 arch-chroot /mnt /bin/bash <<EOF
 echo "$HOSTNAME" > /etc/hostname
@@ -137,4 +139,4 @@ dialog --title "Info" --msgbox "Final configuration complete." 8 40
 
 umount -R /mnt
 
-dialog --title "Installation Complete" --msgbox "Installation complete!" 8 40
+dialog --title "Installation Complete" --msgbox "The installation is complete!\nPlease reboot your system." 8 50
