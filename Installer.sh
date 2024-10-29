@@ -71,6 +71,9 @@ function collect_package_selection {
     echo "$packages"
 }
 
+# Collect hostname
+hostname=$(collect_input "Enter your hostname:")
+
 # Collect disk selection
 disk=$(collect_menu_selection "Disk Selection" "Select a disk to install Arch Linux:" "4 \
 1 "/dev/sda" \
@@ -78,19 +81,13 @@ disk=$(collect_menu_selection "Disk Selection" "Select a disk to install Arch Li
 3 "/dev/nvme0n1" \
 4 "Exit"")
 
-# Collect username
-username=$(collect_input "Enter your username:")
-
-# Collect password
-password=$(collect_password "Enter your password:")
-
 # Collect timezone
 timezone=$(collect_menu_selection "Timezone Selection" "Select your timezone:" "5 \
 1 "UTC" \
 2 "America/New_York" \
 3 "Europe/Berlin" \
 4 "Asia/Tokyo" \
-5 "Exit"")
+5 "America/Sao_Paulo"")
 
 # Collect language
 language=$(collect_menu_selection "Language Selection" "Select your language:" "5 \
@@ -100,29 +97,56 @@ language=$(collect_menu_selection "Language Selection" "Select your language:" "
 4 "es_ES.UTF-8" \
 5 "Exit"")
 
+# Collect network configuration
+network_config=$(collect_menu_selection "Network Configuration" "Select your network type:" "2 \
+1 "NetworkManager" \
+2 "systemd-networkd"")
+
 # Collect package selection
 packages=$(collect_package_selection "Package Selection" "Select additional packages to install:" "5 \
 1 "base-devel" off \
 2 "vim" off \
 3 "git" off \
 4 "networkmanager" off \
-5 "Exit"")
+5 "sddm" off")
 
-# Convert selected packages to JSON format
-packages_list=$(echo "$packages" | tr '\n' ',' | sed 's/,$//')
-
-# Set default config path for saving JSON
+# Prepare the JSON structure
 config_path="$HOME/install_config.json"
 
-# Create the JSON structure and save to file
+# Create JSON file with structured data
 {
   echo "{"
-  echo "  \"disk\": \"$disk\","
-  echo "  \"username\": \"$username\","
-  echo "  \"password\": \"$password\","
+  echo "  \"__separator__\": null,"
+  echo "  \"hostname\": \"$hostname\","
   echo "  \"timezone\": \"$timezone\","
-  echo "  \"language\": \"$language\","
-  echo "  \"packages\": [$packages_list]"
+  echo "  \"locale_config\": {"
+  echo "    \"kb_layout\": \"us\","
+  echo "    \"sys_enc\": \"UTF-8\","
+  echo "    \"sys_lang\": \"$language\""
+  echo "  },"
+  echo "  \"network_config\": {"
+  echo "    \"type\": \"$network_config\""
+  echo "  },"
+  echo "  \"disk_config\": {"
+  echo "    \"config_type\": \"default_layout\","
+  echo "    \"device_modifications\": ["
+  echo "      {"
+  echo "        \"device\": \"$disk\","
+  echo "        \"partitions\": ["
+  echo "          {"
+  echo "            \"fs_type\": \"btrfs\","
+  echo "            \"mountpoint\": null,"
+  echo "            \"status\": \"create\","
+  echo "            \"type\": \"primary\""
+  echo "          }"
+  echo "        ],"
+  echo "        \"wipe\": true"
+  echo "      }"
+  echo "    ]"
+  echo "  },"
+  echo "  \"packages\": [$(echo "$packages" | tr '\n' ',' | sed 's/,$//')],"
+  echo "  \"archinstall-language\": \"English\","
+  echo "  \"script\": \"guided\""
   echo "}"
 } > "$config_path"
 
