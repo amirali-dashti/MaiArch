@@ -49,16 +49,26 @@ function select_disk() {
   fi
 }
 
-# Partition disk using parted
+# Partition disk using fdisk
 function partition_disk() {
   dialog --title "Partitioning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 10 80
-  log "Creating GPT partition table and partitions on $DISK..."
+  log "Creating partitions on $DISK using fdisk..."
 
-  # Creating GPT and partitions
-  parted "$DISK" mklabel gpt || rollback
-  parted "$DISK" mkpart primary fat32 1MiB 513MiB || rollback
-  parted "$DISK" set 1 esp on || rollback
-  parted "$DISK" mkpart primary ext4 513MiB 100% || rollback
+  {
+    echo "g"                # Create a new empty GPT partition table
+    echo "n"                # New partition
+    echo ""                # Default partition number
+    echo "1"               # Starting sector
+    echo "+513M"          # Size of the partition
+    echo "t"                # Change partition type
+    echo "1"                # Partition number
+    echo "1"                # EFI System partition type
+    echo "n"                # New partition
+    echo ""                # Default partition number
+    echo ""                # Default start
+    echo ""                # Use all remaining space
+    echo "w"                # Write changes
+  } | fdisk "$DISK" || rollback
 
   # Create physical volume and logical volumes
   pvcreate "${DISK}2" || rollback
@@ -182,7 +192,7 @@ EOF
 # Unmount partitions
 function unmount_partitions() {
   log "Unmounting partitions..."
-  umount -R /mnt || { log "Failed to unmount partitions."; exit 1; }
+  umount -R /mnt
 }
 
 # Main script flow
