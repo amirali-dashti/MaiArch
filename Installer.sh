@@ -11,70 +11,58 @@ UEFI=false
 
 if [ -d "/sys/firmware/efi/efivars" ]; then
     if [ "$(cat /sys/firmware/efi/fw_platform_size)" -eq 32 ]; then
-        echo "32-bit UEFI systems are not supported. Exiting."
+        dialog --msgbox "32-bit UEFI systems are not supported. Exiting." 10 50
         exit 1
     fi
     UEFI=true
-    echo "UEFI system detected."
+    dialog --infobox "UEFI system detected." 5 30
 else
     BIOS=true
-    echo "BIOS system detected."
+    dialog --infobox "BIOS system detected." 5 30
 fi
 
 # Check for internet connection
 if ! ping -c 1 google.com &> /dev/null; then
-    echo "No internet connection detected."
-    echo "Please set up your connection with iwctl or mmcli, then try again."
-    echo "(DHCP will work automatically if using ethernet.)"
+    dialog --msgbox "No internet connection detected. Please set up your connection with iwctl or mmcli, then try again." 12 70
     exit 1
 fi
 
 # List available disks
 lsblk
 
-# Prompt user for installation parameters
-echo "Enter the disk to install to (e.g., /dev/sda, /dev/nvme0n1):"
-read -r DISK
-
-echo "Enter the hostname of the system:"
-read -r HOSTNAME
-
-echo "Enter the username for the user account to be created:"
-read -r USERNAME
+# Prompt user for installation parameters using dialog
+DISK=$(dialog --inputbox "Enter the disk to install to (e.g., /dev/sda, /dev/nvme0n1):" 8 60 3>&1 1>&2 2>&3 3>&-)
+HOSTNAME=$(dialog --inputbox "Enter the hostname of the system:" 8 60 3>&1 1>&2 2>&3 3>&-)
+USERNAME=$(dialog --inputbox "Enter the username for the user account to be created:" 8 60 3>&1 1>&2 2>&3 3>&-)
 
 # Prompt for timezone until valid
 TIMEZONE=""
-until [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
-    echo "Enter your timezone (e.g., America/New_York):"
-    read -r TIMEZONE
+while ! [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
+    TIMEZONE=$(dialog --inputbox "Enter your timezone (e.g., America/New_York):" 8 60 3>&1 1>&2 2>&3 3>&-)
 done
 
 ## STAGE 2: PARTITIONING ##
 
 # Confirm partitioning
-echo "The following disk will be partitioned: $DISK"
-echo "This will erase all data on the disk."
-read -p "Are you sure you want to continue? (y/n): " CONFIRM
-
-if [[ "$CONFIRM" != "y" ]]; then
-    echo "Aborting."
+if ! dialog --yesno "The following disk will be partitioned: $DISK\nThis will erase all data on the disk.\nAre you sure you want to continue?" 10 70; then
+    dialog --msgbox "Aborting." 5 30
     exit 1
 fi
 
 # Validate disk existence and size
 if [ ! -b "$DISK" ]; then
-    echo "Disk $DISK does not exist."
+    dialog --msgbox "Disk $DISK does not exist." 5 30
     exit 1
 fi
 
 if [ "$(blockdev --getsize64 "$DISK")" -lt 15000000000 ]; then
-    echo "Disk $DISK is too small. It must be at least 15GB."
+    dialog --msgbox "Disk $DISK is too small. It must be at least 15GB." 8 50
     exit 1
 fi
 
 # Partition the disk
 if [ "$BIOS" = true ]; then
-    echo "Partitioning disk $DISK for BIOS system."
+    dialog --infobox "Partitioning disk $DISK for BIOS system." 5 50
     parted -s "$DISK" mklabel msdos
     parted -s "$DISK" mkpart primary linux-swap 1MiB 513MiB
     parted -s "$DISK" mkpart primary ext4 513MiB 100%
@@ -88,7 +76,7 @@ if [ "$BIOS" = true ]; then
     swapon "${DISK}1"
 
 else
-    echo "Partitioning disk $DISK for UEFI system."
+    dialog --infobox "Partitioning disk $DISK for UEFI system." 5 50
     parted -s "$DISK" mklabel gpt
     parted -s "$DISK" mkpart primary fat32 1MiB 1025MiB
     parted -s "$DISK" mkpart primary linux-swap 1025MiB 1537MiB
@@ -107,21 +95,21 @@ else
 fi
 
 # Generate fstab
-echo "Generating fstab."
+dialog --infobox "Generating fstab." 5 30
 genfstab -U /mnt >> /mnt/etc/fstab
 
 # Update mirrorlist
-echo "Updating mirrorlist."
+dialog --infobox "Updating mirrorlist." 5 30
 reflector --latest 200 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 
 
 ## STAGE 3: INSTALLATION ##
-echo "Installing base system."
+dialog --infobox "Installing base system." 5 30
 pacstrap -k /mnt base linux linux-firmware sof-firmware networkmanager vim nano sudo grub efibootmgr elinks git reflector
 
-echo "Base system installed."
+dialog --infobox "Base system installed." 5 30
 
 ## STAGE 4: SYSTEM CONFIGURATION ##
-echo "Doing final configuration."
+dialog --infobox "Doing final configuration." 5 30
 arch-chroot /mnt /bin/bash <<EOF
 echo "$HOSTNAME" > /etc/hostname
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
@@ -133,14 +121,12 @@ echo "KEYMAP=us" > /etc/vconsole.conf
 systemctl enable NetworkManager
 
 # Set root password
-echo "Please enter the root password:"
-read -s ROOT_PASSWORD
+ROOT_PASSWORD=$(dialog --inputbox "Please enter the root password:" 10 50 3>&1 1>&2 2>&3 3>&-)
 echo "root:$ROOT_PASSWORD" | chpasswd
 
 # Create user and set password
 useradd -m -G wheel -s /bin/bash "$USERNAME"
-echo "Please enter the password for user $USERNAME:"
-read -s USER_PASSWORD
+USER_PASSWORD=$(dialog --inputbox "Please enter the password for user $USERNAME:" 10 50 3>&1 1>&2 2>&3 3>&-)
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
@@ -154,9 +140,9 @@ fi
 grub-mkconfig -o /boot/grub/grub.cfg
 EOF
 
-echo "Final configuration complete."
+dialog --msgbox "Final configuration complete." 8 40
 
 # Unmount partitions
 umount -R /mnt
 
-echo "Installation complete."
+dialog --msgbox "Installation complete." 6 30
