@@ -49,50 +49,32 @@ function select_disk() {
   fi
 }
 
-# Partition disk using fdisk
+# Partition disk using parted
 function partition_disk() {
   dialog --title "Partitioning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 10 80
-  log "Creating partitions on $DISK using fdisk..."
+  log "Creating partitions on $DISK using parted..."
 
+  # Using parted to create partitions
   {
-    echo "g"                # Create a new empty GPT partition table
-    echo "n"                # New partition
-    echo ""                # Default partition number
-    echo "1"               # Starting sector
-    echo "+513M"          # Size of the partition
-    echo "t"                # Change partition type
-    echo "1"                # Partition number
-    echo "1"                # EFI System partition type
-    echo "n"                # New partition
-    echo ""                # Default partition number
-    echo ""                # Default start
-    echo ""                # Use all remaining space
-    echo "w"                # Write changes
-  } | fdisk "$DISK" || rollback
-
-  # Create physical volume and logical volumes
-  pvcreate "${DISK}2" || rollback
-  vgcreate vg0 "${DISK}2" || rollback
-  lvcreate -L 16G vg0 -n swap || rollback
-  lvcreate -L 512M vg0 -n boot || rollback
-  lvcreate -l 100%FREE vg0 -n root || rollback
+    echo "mklabel gpt"           # Create a new empty GPT partition table
+    echo "mkpart primary fat32 1MiB 514MiB"  # EFI partition
+    echo "mkpart primary ext4 514MiB 100%"    # Root partition
+    echo "set 1 esp on"          # Set EFI flag
+  } | parted "$DISK" --script || rollback
 }
 
 # Format partitions with validation and rollback on failure
 function format_partitions() {
   log "Formatting partitions..."
   mkfs.fat -F32 "${DISK}1" && log "EFI partition formatted successfully." || rollback
-  mkfs.ext4 /dev/vg0/boot && log "BOOT partition formatted successfully." || rollback
-  mkfs.ext4 /dev/vg0/root && log "ROOT partition formatted successfully." || rollback
-  mkswap /dev/vg0/swap && log "Swap partition created successfully." || rollback
+  mkfs.ext4 "${DISK}2" && log "Root partition formatted successfully." || rollback
 }
 
 # Mount partitions with rollback tracking
 function mount_partitions() {
   log "Mounting partitions..."
-  mount /dev/vg0/root /mnt && ROLLBACK_STACK+=("umount /mnt") || rollback
-  mkdir -p /mnt/boot
-  mount /dev/vg0/boot /mnt/boot && ROLLBACK_STACK+=("umount /mnt/boot") || rollback
+  mount "${DISK}2" /mnt && ROLLBACK_STACK+=("umount /mnt") || rollback
+  mkdir -p /mnt/boot/efi
   mount "${DISK}1" /mnt/boot/efi && ROLLBACK_STACK+=("umount /mnt/boot/efi") || rollback
 }
 
