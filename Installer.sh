@@ -49,6 +49,17 @@ function select_disk() {
   fi
 }
 
+# Detect if running in VirtualBox
+function is_virtualbox() {
+  if [[ -f /sys/class/dmi/id/product_name ]]; then
+    local product_name=$(cat /sys/class/dmi/id/product_name)
+    if [[ "$product_name" == *"VirtualBox"* ]]; then
+      return 0  # Running in VirtualBox
+    fi
+  fi
+  return 1  # Not running in VirtualBox
+}
+
 # Partition disk using parted
 function partition_disk() {
   dialog --title "Partitioning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 10 80
@@ -181,6 +192,14 @@ function unmount_partitions() {
 log "Starting CLI-based MaiArch installation script..."
 check_internet
 select_disk
+
+# Detect if running in VirtualBox
+if is_virtualbox; then
+  log "Detected VirtualBox environment."
+  # You can set specific configurations for VirtualBox here if needed
+else
+  log "Not running in VirtualBox."
+fi
 
 partition_disk
 format_partitions
