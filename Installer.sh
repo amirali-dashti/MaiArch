@@ -96,4 +96,3 @@ EOF
 
 # Step 16: Unmount and Reboot
 umount -R /mnt
-reboot
