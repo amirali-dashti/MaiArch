@@ -98,9 +98,11 @@ language=$(collect_menu_selection "Language Selection" "Select your language:" "
 5 "Exit"")
 
 # Collect network configuration
-network_config=$(collect_menu_selection "Network Configuration" "Select your network type:" "2 \
-1 "NetworkManager" \
-2 "systemd-networkd"")
+network_config=$(collect_menu_selection "Network Configuration" "Select your network type:" "4 \
+1 "none" \
+2 "dhcp" \
+3 "static" \
+4 "Exit"")
 
 # Collect package selection
 packages=$(collect_package_selection "Package Selection" "Select additional packages to install:" "5 \
