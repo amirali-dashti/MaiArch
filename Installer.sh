@@ -49,35 +49,56 @@ function select_disk() {
   fi
 }
 
-# Partition disk
+# Partition disk with LVM
 function partition_disk() {
-  dialog --title "Partitioning" --yesno "Do you want to create custom partitions?" 7 40
-  if [[ $? -eq 0 ]]; then
-    dialog --title "Partitioning" --msgbox "Please partition your disk manually, then press OK to continue." 8 40
-    cfdisk "$DISK"
-  else
-    log "Creating default partitions on $DISK..."
-    sgdisk --zap-all "$DISK"
-    sgdisk --new=1:0:+512M --typecode=1:ef00 --change-name=1:EFI "$DISK"
-    sgdisk --new=2:0:+512M --typecode=2:8300 --change-name=2:BOOT "$DISK"
-    sgdisk --new=3:0:0 --typecode=3:8300 --change-name=3:ROOT "$DISK"
-  fi
+  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically or manually. If you choose to partition automatically, it will erase all data on the disk." 8 70
+
+  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 50 2 \
+    1 "Automatically partition the entire disk" \
+    2 "Manually partition the disk using cfdisk" 3>&1 1>&2 2>&3)
+
+  case "$PARTITION_OPTION" in
+    1)
+      log "Automatically partitioning $DISK..."
+      sgdisk --zap-all "$DISK" || rollback
+      sgdisk --new=1:0:+512M --typecode=1:ef00 --change-name=1:EFI "$DISK" || rollback
+      sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:LVM "$DISK" || rollback
+      
+      # Create physical volume
+      pvcreate "${DISK}2" || rollback
+      # Create volume group
+      vgcreate vg0 "${DISK}2" || rollback
+      # Create logical volumes
+      lvcreate -L 16G vg0 -n swap || rollback
+      lvcreate -L 512M vg0 -n boot || rollback
+      lvcreate -l 100%FREE vg0 -n root || rollback
+      ;;
+    2)
+      dialog --title "Manual Partitioning" --msgbox "Please partition your disk manually using cfdisk, then press OK to continue." 8 50
+      cfdisk "$DISK"
+      ;;
+    *)
+      dialog --title "Error" --msgbox "Invalid option selected." 6 40
+      exit 1
+      ;;
+  esac
 }
 
 # Format partitions with validation and rollback on failure
 function format_partitions() {
   log "Formatting partitions..."
   mkfs.fat -F32 "${DISK}1" && log "EFI partition formatted successfully." || rollback
-  mkfs.ext4 "${DISK}2" && log "BOOT partition formatted successfully." || rollback
-  mkfs.ext4 "${DISK}3" && log "ROOT partition formatted successfully." || rollback
+  mkfs.ext4 /dev/vg0/boot && log "BOOT partition formatted successfully." || rollback
+  mkfs.ext4 /dev/vg0/root && log "ROOT partition formatted successfully." || rollback
+  mkswap /dev/vg0/swap && log "Swap partition created successfully." || rollback
 }
 
 # Mount partitions with rollback tracking
 function mount_partitions() {
   log "Mounting partitions..."
-  mount "${DISK}3" /mnt && ROLLBACK_STACK+=("umount /mnt") || rollback
-  mkdir -p /mnt/boot /mnt/boot/efi
-  mount "${DISK}2" /mnt/boot && ROLLBACK_STACK+=("umount /mnt/boot") || rollback
+  mount /dev/vg0/root /mnt && ROLLBACK_STACK+=("umount /mnt") || rollback
+  mkdir -p /mnt/boot
+  mount /dev/vg0/boot /mnt/boot && ROLLBACK_STACK+=("umount /mnt/boot") || rollback
   mount "${DISK}1" /mnt/boot/efi && ROLLBACK_STACK+=("umount /mnt/boot/efi") || rollback
 }
 
@@ -183,8 +204,12 @@ function unmount_partitions() {
 
 # Main script flow
 log "Starting CLI-based Arch Linux installation script..."
+choose_mirrors  # Optional: Choose pacman mirrors before installation
 check_internet
 select_disk
+
+dialog --title "Warning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 8 70
+
 partition_disk
 format_partitions
 mount_partitions
