@@ -6,7 +6,7 @@ if ! command -v dialog &> /dev/null; then
   sudo pacman -Sy --noconfirm dialog
 fi
 
-LOG_FILE="/var/log/arch_install_cli_gui.log"
+LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Changed log file name to include MaiArch
 ROLLBACK_STACK=()
 
 # Function to log messages
@@ -42,7 +42,7 @@ function check_internet() {
 
 # Select disk for installation
 function select_disk() {
-  DISK=$(lsblk -dpno NAME,SIZE | grep -E "/dev/sd|nvme|vd" | dialog --title "Select Disk" --menu "Choose the disk to install Arch Linux on:" 15 50 4 $(awk '{print $1 " \"" $2 "\""}') 3>&1 1>&2 2>&3)
+  DISK=$(lsblk -dpno NAME,SIZE | grep -E "/dev/sd|nvme|vd" | dialog --title "Select Disk" --menu "Choose the disk to install MaiArch on:" 15 50 4 $(awk '{print $1 " \"" $2 "\""}') 3>&1 1>&2 2>&3)
   if [[ -z "$DISK" ]]; then
     dialog --title "Error" --msgbox "Disk selection required." 6 40
     exit 1
@@ -129,7 +129,7 @@ function validate_input() {
 
 # Configure hostname, timezone, and locale with validation
 function configure_system() {
-  HOSTNAME=$(dialog --title "Hostname" --inputbox "Enter the hostname:" 8 40 3>&1 1>&2 2>&3)
+  HOSTNAME=$(dialog --title "Hostname" --inputbox "Enter the hostname for your MaiArch system:" 8 40 3>&1 1>&2 2>&3)
   HOSTNAME=$(validate_input "$HOSTNAME")
 
   TIMEZONE=$(dialog --title "Timezone" --inputbox "Enter your timezone (e.g., America/New_York):" 8 40 3>&1 1>&2 2>&3)
@@ -170,7 +170,7 @@ EOF
 
 # Install GUI with rollback tracking
 function install_gui() {
-  GUI_CHOICE=$(dialog --title "Select GUI" --menu "Choose a Desktop Environment to install:" 15 40 3 \
+  GUI_CHOICE=$(dialog --title "Select GUI" --menu "Choose a Desktop Environment to install on MaiArch:" 15 40 3 \
     1 "GNOME" 2 "KDE" 3 "XFCE" 3>&1 1>&2 2>&3)
 
   arch-chroot /mnt /bin/bash <<EOF
@@ -203,8 +203,7 @@ function unmount_partitions() {
 }
 
 # Main script flow
-log "Starting CLI-based Arch Linux installation script..."
-choose_mirrors  # Optional: Choose pacman mirrors before installation
+log "Starting CLI-based MaiArch installation script..."
 check_internet
 select_disk
 
@@ -220,5 +219,5 @@ set_root_password
 install_gui
 unmount_partitions
 
-log "Arch Linux installation complete. Please reboot."
-dialog --title "Installation Complete" --msgbox "Arch Linux installation complete! Please reboot your system." 8 40
+log "MaiArch installation complete. Please reboot."
+dialog --title "Installation Complete" --msgbox "MaiArch installation complete! Please reboot your system." 8 40
