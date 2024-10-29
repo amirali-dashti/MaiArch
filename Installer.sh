@@ -1,170 +1,77 @@
 #!/bin/bash
 
-# Synopsys: This script installs a base Arch Linux system with user interaction.
-
-# Install necessary packages if not present
+# Install dialog if not present
 command -v dialog &> /dev/null || sudo pacman -Sy --noconfirm dialog
-command -v curl &> /dev/null || sudo pacman -Sy --noconfirm curl
-command -v rankmirrors &> /dev/null || sudo pacman -Sy --noconfirm pacman-contrib
 
-# Clear the screen for a clean start
-clear
+LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Log file for installation process
 
-## STAGE 1 : CONFIGURATION ##
-
-# Function to detect BIOS/UEFI
-detect_boot_mode() {
-    if [ -d "/sys/firmware/efi/efivars" ]; then
-        if [ "$(cat /sys/firmware/efi/fw_platform_size)" -eq 32 ]; then
-            dialog --title "Error" --msgbox "32-bit UEFI systems are not supported by this installer.\nExiting..." 8 60
-            exit 1
-        fi
-        echo "UEFI"
-    else
-        echo "BIOS"
-    fi
+# Function to log messages
+log() {
+  echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
-# Check for internet connection
-check_internet() {
-    if ! ping -c 1 google.com &> /dev/null; then
-        dialog --title "Error" --msgbox "No internet connection detected.\nPlease connect and try again." 8 60
-        exit 1
-    fi
-}
-
-# Function to prompt user input with dialog
-get_input() {
-    local title="$1"
-    local prompt="$2"
-    local default="$3"
-    dialog --title "$title" --inputbox "$prompt" 8 60 "$default" 3>&1 1>&2 2>&3
-}
-
-# Function to list available storage devices and prompt for selection
-select_disk() {
-    disk_options=()
-    while IFS= read -r line; do
-        disk_name=$(echo "$line" | awk '{print $1}')
-        disk_size=$(echo "$line" | awk '{print $2}')
-        disk_options+=("$disk_name" "$disk_size")
-    done < <(lsblk -dpno NAME,SIZE | grep -E "/dev/sd|/dev/nvme|/dev/vd")
-    
-    DISK=$(dialog --title "Disk Selection" --menu "Choose the disk to install to:" 15 50 4 "${disk_options[@]}" 3>&1 1>&2 2>&3)
-    
-    if [ -z "$DISK" ]; then
-        dialog --title "Error" --msgbox "No disk selected. Exiting..." 8 40
-        exit 1
-    fi
-    dialog --title "Info" --msgbox "Selected disk: $DISK" 8 40
-}
-
-# Detect boot mode
-BOOT_MODE=$(detect_boot_mode)
-dialog --title "Info" --msgbox "$BOOT_MODE system detected." 8 40
-
-# Check for internet connection
-check_internet
-
-# Call disk selection function
-select_disk
-
-# Prompt for hostname
-HOSTNAME=$(get_input "Hostname" "Enter the hostname of the system:" "archlinux")
-
-# Prompt for username
-USERNAME=$(get_input "Username" "Enter the username of the user account to be created:" "user")
-
-# Prompt for timezone
-TIMEZONE=""
-until [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
-    TIMEZONE=$(get_input "Timezone" "Enter your timezone (e.g., America/New_York):" "")
-done
-
-## STAGE 2 : PARTITIONING ##
-
-# Confirmation before partitioning
-if ! dialog --title "Confirmation" --yesno "You are about to partition the disk: $DISK\nThis will erase all data on the disk.\n\nAre you sure you want to continue?" 10 60; then
-    dialog --title "Aborted" --msgbox "Aborting the installation." 6 30
-    exit 1
+# Check for root privileges
+if [ "$EUID" -ne 0 ]; then
+  dialog --title "Error" --msgbox "Please run as root." 6 40
+  exit 1
 fi
 
-# Check disk size
-if [ "$(lsblk -b -n -o SIZE "$DISK")" -lt 15000000000 ]; then
-    dialog --title "Error" --msgbox "Disk $DISK is too small. It must be at least 15GB." 8 60
-    exit 1
-fi
+# Check for internet connectivity
+ping -c 1 google.com &>/dev/null || { dialog --title "Error" --msgbox "No internet connection detected." 6 40; exit 1; }
 
-# Partition the disk based on BIOS or UEFI
-if [ "$BOOT_MODE" = "BIOS" ]; then
-    dialog --title "Info" --msgbox "Partitioning disk $DISK for BIOS system." 8 40
-    parted -s "$DISK" mklabel msdos
-    parted -s "$DISK" mkpart primary linux-swap 1MiB 513MiB
-    parted -s "$DISK" mkpart primary ext4 513MiB 100%
-    mkswap "${DISK}1"
-    mkfs.ext4 "${DISK}2"
-    mount "${DISK}2" /mnt
-    swapon "${DISK}1"
-else
-    dialog --title "Info" --msgbox "Partitioning disk $DISK for UEFI system." 8 40
-    parted -s "$DISK" mklabel gpt
-    parted -s "$DISK" mkpart primary fat32 1MiB 1025MiB
-    parted -s "$DISK" mkpart primary linux-swap 1025MiB 1537MiB
-    parted -s "$DISK" mkpart primary ext4 1537MiB 100%
-    mkfs.fat -F 32 "${DISK}1"
-    mkswap "${DISK}2"
-    mkfs.ext4 "${DISK}3"
-    mount "${DISK}3" /mnt
-    swapon "${DISK}2"
-    mount --mkdir "${DISK}1" /mnt/boot
-fi
+# Select disk for installation
+DISK=$(lsblk -dpno NAME | dialog --title "Select Disk" --menu "Choose the disk to install MaiArch on:" 15 50 4 $(lsblk -dpno NAME) 3>&1 1>&2 2>&3)
+[ -z "$DISK" ] && { dialog --title "Error" --msgbox "Disk selection required." 6 40; exit 1; }
 
-dialog --title "Info" --msgbox "Generating fstab..." 8 40
+# Partition disk using parted
+parted "$DISK" --script mklabel gpt mkpart primary fat32 1MiB 514MiB mkpart primary ext4 514MiB 100% set 1 esp on
+
+# Format partitions
+mkfs.fat -F32 "${DISK}1"
+mkfs.ext4 "${DISK}2"
+
+# Mount partitions
+mount "${DISK}2" /mnt
+mkdir -p /mnt/boot/efi
+mount "${DISK}1" /mnt/boot/efi
+
+# Install base system
+pacstrap /mnt base base-devel linux linux-firmware
+
+# Generate fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
-## STAGE 3 : UPDATE MIRRORLIST ##
-# Use default method with rankmirrors
-update_mirrors() {
-    cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
-    rankmirrors -n 6 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
-    if [ $? -eq 0 ]; then
-        dialog --title "Info" --msgbox "Mirror list updated successfully using rankmirrors." 8 40
-    else
-        cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
-        dialog --title "Warning" --msgbox "Failed to rank mirrors. Restored original mirror list." 8 50
-    fi
-}
-update_mirrors
+# Configure hostname and timezone
+HOSTNAME=$(dialog --title "Hostname" --inputbox "Enter the hostname for your MaiArch system:" 8 40 3>&1 1>&2 2>&3)
+TIMEZONE=$(dialog --title "Timezone" --inputbox "Enter your timezone (e.g., America/New_York):" 8 40 3>&1 1>&2 2>&3)
 
-## STAGE 4 : INSTALLATION ##
-dialog --title "Info" --msgbox "Installing base system..." 8 40
-if ! pacstrap -k /mnt base linux linux-firmware sof-firmware NetworkManager vim nano sudo grub efibootmgr elinks git; then
-    dialog --title "Error" --msgbox "Base system installation failed.\nExiting..." 8 60
-    exit 1
-fi
-dialog --title "Info" --msgbox "Base system installed successfully." 8 40
-
-## STAGE 5 : SYSTEM CONFIGURATION ##
 arch-chroot /mnt /bin/bash <<EOF
 echo "$HOSTNAME" > /etc/hostname
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
-echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-echo "KEYMAP=us" > /etc/vconsole.conf
-systemctl enable NetworkManager
-echo "root:root" | chpasswd
-useradd -m -G wheel -s /bin/bash "$USERNAME"
-echo "$USERNAME:$USERNAME" | chpasswd
-echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
-grub-mkconfig -o /boot/grub/grub.cfg
 EOF
 
-dialog --title "Info" --msgbox "Final configuration complete." 8 40
+# Set root password
+PASSWORD=$(dialog --title "Root Password" --insecure --passwordbox "Enter a password for the root user:" 8 40 3>&1 1>&2 2>&3)
+
+arch-chroot /mnt /bin/bash <<EOF
+echo "root:$PASSWORD" | chpasswd
+EOF
+
+# Install GUI (choose one)
+GUI_CHOICE=$(dialog --title "Select GUI" --menu "Choose a Desktop Environment to install on MaiArch:" 15 40 3 \
+  1 "GNOME" 2 "KDE" 3 "XFCE" 3>&1 1>&2 2>&3)
+
+arch-chroot /mnt /bin/bash <<EOF
+case "$GUI_CHOICE" in
+  1) pacman --noconfirm -S gnome gnome-extra gdm && systemctl enable gdm ;;
+  2) pacman --noconfirm -S plasma kde-applications sddm && systemctl enable sddm ;;
+  3) pacman --noconfirm -S xfce4 xfce4-goodies lightdm lightdm-gtk-greeter && systemctl enable lightdm ;;
+esac
+EOF
 
 # Unmount partitions
 umount -R /mnt
 
-dialog --title "Installation Complete" --msgbox "The installation is complete!\nPlease reboot your system." 8 50
+log "MaiArch installation complete."
+dialog --title "Installation Complete" --msgbox "MaiArch installation complete! Please reboot your system." 8 40
