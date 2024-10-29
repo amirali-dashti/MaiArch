@@ -1,105 +1,162 @@
-Your script is quite thorough and well-structured, but there are a few issues and improvements that can be made. I'll break down the debugging and enhancements:
+#!/bin/bash
 
-### Issues and Fixes
+# Synopsis: This script installs a base Arch Linux system to a specified disk.
+# Proper usage: wget https://raw.githubusercontent.com/portalmaster137/ArchyBootstrapper/main/booter.sh -O booter.sh && chmod +x booter.sh && ./booter.sh
 
-1. **Incorrect Variable Assignment for `TIMEZONE`:**
-   - You're not assigning `dTIMEZONE` to `TIMEZONE`, which will cause the script to keep prompting for a timezone indefinitely.
-   - **Fix:** Update the assignment within the loop.
+## STAGE 1: CONFIGURATION ##
 
-   ```bash
-   until [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
-       echo "Please enter your timezone. (Example: America/New_York)"
-       read TIMEZONE  # Update to TIMEZONE
-   done
-   ```
+# Determine if this is a UEFI or BIOS system
+BIOS=false
+UEFI=false
 
-2. **Logical Issue with Disk Size Check:**
-   - You’re using `lsblk` to check disk size. If the disk is not mounted or has no partitions, this might not return the expected result. It's safer to use `blockdev` or read directly from `/sys/class/block/$DISK/size`.
-   - **Fix:** Use `blockdev` for size checking.
+if [ -d "/sys/firmware/efi/efivars" ]; then
+    if [ "$(cat /sys/firmware/efi/fw_platform_size)" -eq 32 ]; then
+        echo "32-bit UEFI systems are not supported. Exiting."
+        exit 1
+    fi
+    UEFI=true
+    echo "UEFI system detected."
+else
+    BIOS=true
+    echo "BIOS system detected."
+fi
 
-   ```bash
-   if [ $(blockdev --getsize64 $DISK) -lt 15000000000 ]; then
-       echo "Disk $DISK is too small. It must be at least 15GB."
-       exit 1
-   fi
-   ```
+# Check for internet connection
+if ! ping -c 1 google.com &> /dev/null; then
+    echo "No internet connection detected."
+    echo "Please set up your connection with iwctl or mmcli, then try again."
+    echo "(DHCP will work automatically if using ethernet.)"
+    exit 1
+fi
 
-3. **Unmount Command Typo:**
-   - There's a typo in the unmount command: `umont` should be `umount`.
-   - **Fix:** Correct the command.
+# List available disks
+lsblk
 
-   ```bash
-   umount -R /mnt  # Change from umont to umount
-   ```
+# Prompt user for installation parameters
+echo "Enter the disk to install to (e.g., /dev/sda, /dev/nvme0n1):"
+read -r DISK
 
-4. **Prompting for Password:**
-   - The script mentions a password but does not prompt for it. It’s advisable to securely handle passwords.
-   - **Fix:** Prompt for the root and user password before assigning them.
+echo "Enter the hostname of the system:"
+read -r HOSTNAME
 
-   ```bash
-   echo "Please enter the root password:"
-   read -s ROOT_PASSWORD  # -s for silent input
-   echo "$ROOT_PASSWORD" | chpasswd
-   
-   echo "Please enter the password for user $USERNAME:"
-   read -s USER_PASSWORD
-   echo "$USERNAME:$USER_PASSWORD" | chpasswd
-   ```
+echo "Enter the username for the user account to be created:"
+read -r USERNAME
 
-5. **Safety Checks for Partition Creation:**
-   - Add checks to ensure the `parted` commands succeed before formatting or mounting.
-   - **Improvement:** Check the exit status after `parted` commands.
-
-   ```bash
-   parted -s $DISK mklabel msdos
-   if [ $? -ne 0 ]; then
-       echo "Failed to create partition table."
-       exit 1
-   fi
-   ```
-
-6. **Improved `lsblk` Call:**
-   - Consider adding options to `lsblk` to get a clearer view of available devices.
-   - **Improvement:** Use `lsblk -f` to show filesystem info.
-
-### Complete Revised Script Section
-
-Here’s a revised section of the script reflecting some of these fixes:
-
-```bash
-# Prompt for timezone
+# Prompt for timezone until valid
 TIMEZONE=""
 until [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
-    echo "Please enter your timezone. (Example: America/New_York)"
-    read TIMEZONE
+    echo "Enter your timezone (e.g., America/New_York):"
+    read -r TIMEZONE
 done
 
-# Check disk size
+## STAGE 2: PARTITIONING ##
+
+# Confirm partitioning
+echo "The following disk will be partitioned: $DISK"
+echo "This will erase all data on the disk."
+read -p "Are you sure you want to continue? (y/n): " CONFIRM
+
+if [[ "$CONFIRM" != "y" ]]; then
+    echo "Aborting."
+    exit 1
+fi
+
+# Validate disk existence and size
 if [ ! -b "$DISK" ]; then
     echo "Disk $DISK does not exist."
     exit 1
 fi
-if [ $(blockdev --getsize64 $DISK) -lt 15000000000 ]; then
+
+if [ "$(blockdev --getsize64 "$DISK")" -lt 15000000000 ]; then
     echo "Disk $DISK is too small. It must be at least 15GB."
     exit 1
 fi
 
-# Prompt for passwords
+# Partition the disk
+if [ "$BIOS" = true ]; then
+    echo "Partitioning disk $DISK for BIOS system."
+    parted -s "$DISK" mklabel msdos
+    parted -s "$DISK" mkpart primary linux-swap 1MiB 513MiB
+    parted -s "$DISK" mkpart primary ext4 513MiB 100%
+
+    # Format partitions
+    mkswap "${DISK}1"
+    mkfs.ext4 "${DISK}2"
+
+    # Mount partitions
+    mount "${DISK}2" /mnt
+    swapon "${DISK}1"
+
+else
+    echo "Partitioning disk $DISK for UEFI system."
+    parted -s "$DISK" mklabel gpt
+    parted -s "$DISK" mkpart primary fat32 1MiB 1025MiB
+    parted -s "$DISK" mkpart primary linux-swap 1025MiB 1537MiB
+    parted -s "$DISK" mkpart primary ext4 1537MiB 100%
+
+    # Format partitions
+    mkfs.fat -F 32 "${DISK}1"
+    mkswap "${DISK}2"
+    mkfs.ext4 "${DISK}3"
+
+    # Mount partitions
+    mount "${DISK}3" /mnt
+    swapon "${DISK}2"
+    mkdir -p /mnt/boot
+    mount "${DISK}1" /mnt/boot
+fi
+
+# Generate fstab
+echo "Generating fstab."
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Update mirrorlist
+echo "Updating mirrorlist."
+reflector --latest 200 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 
+
+## STAGE 3: INSTALLATION ##
+echo "Installing base system."
+pacstrap -k /mnt base linux linux-firmware sof-firmware networkmanager vim nano sudo grub efibootmgr elinks git reflector
+
+echo "Base system installed."
+
+## STAGE 4: SYSTEM CONFIGURATION ##
+echo "Doing final configuration."
+arch-chroot /mnt /bin/bash <<EOF
+echo "$HOSTNAME" > /etc/hostname
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+systemctl enable NetworkManager
+
+# Set root password
 echo "Please enter the root password:"
 read -s ROOT_PASSWORD
-echo "$ROOT_PASSWORD" | chpasswd
+echo "root:$ROOT_PASSWORD" | chpasswd
 
+# Create user and set password
+useradd -m -G wheel -s /bin/bash "$USERNAME"
 echo "Please enter the password for user $USERNAME:"
 read -s USER_PASSWORD
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
+echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
-# Unmount the filesystem
-umount -R /mnt  # Corrected from umont
-```
+# Install GRUB
+if [ "$UEFI" = true ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+else
+    grub-install --target=i386-pc "$DISK"
+fi
 
-### Final Recommendations
-- **Testing:** Always test scripts like this in a controlled environment (like a VM) to avoid data loss.
-- **Comments and Documentation:** Maintain clear comments throughout the script, especially for critical operations.
-- **Error Handling:** Consider enhancing error handling throughout the script to gracefully manage failures.
+grub-mkconfig -o /boot/grub/grub.cfg
+EOF
 
-Implement these changes and test your script to see if it behaves as expected!
+echo "Final configuration complete."
+
+# Unmount partitions
+umount -R /mnt
+
+echo "Installation complete."
