@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sudo pacman -S dialog
+
 # Ensure dialog is installed
 if ! command -v dialog &> /dev/null; then
     echo "dialog could not be found, please install it first."
