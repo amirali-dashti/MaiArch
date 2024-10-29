@@ -18,53 +18,88 @@ function prompt_password() {
   rm password.txt
 }
 
-# Partitioning
+# Start of the installation process
+print_info "Starting Arch Linux Installation..."
+
+# Partitioning (Placeholder)
 print_info "Partitioning the disk..."
-# ... (use sfdisk or a graphical partitioning tool)
+# Uncomment and modify as needed
+# sfdisk /dev/sda << EOF
+# # partitioning commands here
+# EOF
+# if [ $? -ne 0 ]; then
+#   echo "Partitioning failed"
+#   exit 1
+# fi
 
 # Formatting
 print_info "Formatting partitions..."
-# ... (use mkfs.ext4, mkswap, etc.)
+mkfs.ext4 /dev/sda1 || { echo "Formatting failed"; exit 1; }
+mkswap /dev/sda2 || { echo "Swap formatting failed"; exit 1; }
+swapon /dev/sda2 || { echo "Enabling swap failed"; exit 1; }
 
 # Mounting
 print_info "Mounting partitions..."
-# ... (use mount and swapon)
+mount /dev/sda1 /mnt || { echo "Mounting failed"; exit 1; }
 
 # Pacman Configuration
 print_info "Configuring package manager..."
-# ... (edit mirrorlist, etc.)
+# Example: Customize mirrorlist here
+# nano /etc/pacman.d/mirrorlist
 
 # Package Installation
 print_info "Installing base system..."
-pacstrap /mnt base base-devel
+pacstrap /mnt base base-devel || { echo "Base system installation failed"; exit 1; }
 
 # Chroot
 print_info "Entering chroot environment..."
-arch-chroot /mnt
+arch-chroot /mnt /bin/bash <<EOF
 
-# Configuration
+# Configuration inside chroot
 print_info "Configuring system..."
-# ... (set timezone, locale, keyboard layout, etc.)
+
+# Set timezone
+timedatectl set-timezone YOUR_TIMEZONE
+
+# Generate locales
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+# Set hostname
+HOSTNAME=\$(prompt_user "Enter hostname")
+echo "\$HOSTNAME" > /etc/hostname
+# Update hosts file
+echo "127.0.0.1  localhost" >> /etc/hosts
+echo "::1        localhost" >> /etc/hosts
+echo "127.0.1.1  \$HOSTNAME.localdomain  \$HOSTNAME" >> /etc/hosts
 
 # User Creation
-print_info "Creating user account..."
-USERNAME=$(prompt_user "Username")
-prompt_password "Enter password for $USERNAME"
-echo "$USERNAME:$PASSWORD" | chpasswd
-usermod -aG wheel "$USERNAME"
+USERNAME=\$(prompt_user "Username")
+prompt_password "Enter password for \$USERNAME"
+echo "\$USERNAME:\$PASSWORD" | chpasswd
+usermod -aG wheel "\$USERNAME"
+
+# Configure sudoers (allow wheel group to use sudo)
+echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
 # Network Configuration
 print_info "Configuring network..."
-# ... (edit network configuration files)
+# Example: Install network utilities
+pacman -S --noconfirm networkmanager
+systemctl enable NetworkManager
 
 # Boot Loader Installation
 print_info "Installing boot loader..."
 grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Exit Chroot
+EOF
+
+# Exit Chroot and Cleanup
 print_info "Exiting chroot environment..."
-exit
+umount -R /mnt || { echo "Unmounting failed"; exit 1; }
 
 # Inform user to reboot manually
 print_info "Installation complete. Please reboot the system manually."
+
+# End of the script
