@@ -1,91 +1,61 @@
 #!/bin/bash
 
-# Function to select GUI tool
-function select_gui() {
-    GUI=$(dialog --title "Select GUI Tool" --menu "Choose your GUI tool:" 15 50 3 \
-        1 "dialog" \
-        2 "yad" \
-        3 "zenity" \
-        3>&1 1>&2 2>&3 3>&-)
+# Ensure the script is run as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Please run this script as root."
+    exit 1
+fi
 
-    case $GUI in
-        1) GUI_TOOL="dialog";;
-        2) GUI_TOOL="yad";;
-        3) GUI_TOOL="zenity";;
-        *) echo "Invalid selection. Exiting." && exit 1;;
-    esac
-}
+# Variables
+HOSTNAME="archlinux"
+TIMEZONE="UTC"
+USERNAME="user"
+PASSWORD="password" # Change this to a secure password
+ROOT_PARTITION="/dev/sda1"
+SWAP_PARTITION="/dev/sda2" # Optional, change if necessary
+EFI_PARTITION="/dev/sda3" # For UEFI systems
+MOUNT_POINT="/mnt"
 
-# Function to display error messages
-function show_error() {
-    case $GUI_TOOL in
-        dialog) dialog --title "Error" --msgbox "$1" 6 50;;
-        yad) yad --error --title="Error" --text="$1";;
-        zenity) zenity --error --title="Error" --text="$1";;
-    esac
-}
+# Install necessary packages
+pacstrap $MOUNT_POINT base linux linux-firmware vim
 
-# Function to display information messages
-function show_info() {
-    case $GUI_TOOL in
-        dialog) dialog --title "Info" --msgbox "$1" 6 50;;
-        yad) yad --info --title="Info" --text="$1";;
-        zenity) zenity --info --title="Info" --text="$1";;
-    esac
-}
+# Generate fstab
+genfstab -U $MOUNT_POINT >> $MOUNT_POINT/etc/fstab
 
-# Function to ask for user input for keyboard layout
-function set_keyboard_layout() {
-    KEYBOARD_LAYOUT=$(case $GUI_TOOL in
-        dialog) dialog --inputbox "Set your keyboard layout (e.g., us, fr, de):" 8 50 3>&1 1>&2 2>&3 3>&-;;
-        yad) yad --entry --title="Keyboard Layout" --text="Set your keyboard layout (e.g., us, fr, de):";;
-        zenity) zenity --entry --title="Keyboard Layout" --text="Set your keyboard layout (e.g., us, fr, de):";;
-    esac)
+# Chroot into the new system
+arch-chroot $MOUNT_POINT /bin/bash << EOF
+# Set the timezone
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
 
-    if [[ -z "$KEYBOARD_LAYOUT" ]]; then
-        show_error "No keyboard layout entered. Exiting."
-        exit 1
-    fi
-    loadkeys "$KEYBOARD_LAYOUT"
-}
+# Set the hostname
+echo $HOSTNAME > /etc/hostname
 
-# Function to get root password
-function get_root_password() {
-    ROOT_PASSWORD=$(case $GUI_TOOL in
-        dialog) dialog --passwordbox "Enter root password:" 8 50 3>&1 1>&2 2>&3 3>&-;;
-        yad) yad --entry --title="Root Password" --text="Enter root password:" --hide-text;;
-        zenity) zenity --password --title="Root Password";;
-    esac)
+# Set locale (uncomment your locale)
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-    if [[ -z "$ROOT_PASSWORD" ]]; then
-        show_error "No password entered. Exiting."
-        exit 1
-    fi
+# Set up the root password
+echo "Set root password:"
+passwd
 
-    echo "$ROOT_PASSWORD" | passwd --stdin root  # Adjust for your system's password management
-}
+# Create a new user
+useradd -m -G wheel $USERNAME
+echo "$USERNAME:$PASSWORD" | chpasswd
 
-# Function to check internet connectivity
-function check_internet() {
-    if ping -c 1 -w 1 google.com > /dev/null 2>&1; then
-        return 0
-    else
-        show_error "No internet connection detected. Please check your network settings."
-        exit 1
-    fi
-}
+# Configure sudo
+echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
-# Other functions (partition_disk, format_partitions, mount_partitions, etc.) remain unchanged
-# You can implement those similarly by replacing their dialog or yad calls with respective ones.
+# Install bootloader (for BIOS systems)
+# grub-install --target=i386-pc /dev/sda
 
-# Main function
-function main() {
-    select_gui
-    check_internet
-    set_keyboard_layout
-    get_root_password
-    # Call other functions as needed
-    show_info "Installation complete! Reboot your system."
-}
+# Install bootloader (for UEFI systems)
+grub-install --target=x86_64-efi --efi-directory=$EFI_PARTITION --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
 
-main
+EOF
+
+# Unmount partitions and reboot
+umount -R $MOUNT_POINT
+echo "Installation complete. You can now reboot."
