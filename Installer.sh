@@ -1,40 +1,44 @@
 #!/bin/bash
 
-# Install Zenity if not already installed
-if ! command -v zenity &> /dev/null; then
-    pacman -S --noconfirm zenity
+# Check if dialog is installed, install if not
+if ! command -v dialog &> /dev/null; then
+    pacman -S --noconfirm dialog
 fi
 
 # Step 1: Get User Input
-HOSTNAME=$(zenity --entry --title="Set Hostname" --text="Enter the hostname for your system:" --entry-text="myarch")
-USERNAME=$(zenity --entry --title="Set Username" --text="Enter your username:" --entry-text="user")
-PASSWORD=$(zenity --entry --title="Set Password" --text="Enter your password:" --entry-text="password" --hide-text)
-ROOT_PASSWORD=$(zenity --entry --title="Set Root Password" --text="Enter root password:" --entry-text="rootpassword" --hide-text)
+HOSTNAME=$(dialog --inputbox "Enter the hostname for your system:" 8 40 myarch 3>&1 1>&2 2>&3 3>&-)
+USERNAME=$(dialog --inputbox "Enter your username:" 8 40 user 3>&1 1>&2 2>&3 3>&-)
+PASSWORD=$(dialog --inputbox "Enter your password:" 8 40 password 3>&1 1>&2 2>&3 3>&-)
+ROOT_PASSWORD=$(dialog --inputbox "Enter root password:" 8 40 rootpassword 3>&1 1>&2 2>&3 3>&-)
 
 # Step 2: Disk Selection
-DISK=$(zenity --entry --title="Disk Selection" --text="Enter the disk you want to install Arch Linux on (e.g., /dev/sda):" --entry-text="/dev/sdX")
+DISK=$(dialog --inputbox "Enter the disk you want to install Arch Linux on (e.g., /dev/sda):" 8 40 /dev/sdX 3>&1 1>&2 2>&3 3>&-)
 
 # Step 3: Partition the Disk
-zenity --info --text="Please use a partitioning tool (like fdisk or cfdisk) to partition your disk. Once done, click OK."
-zenity --info --text="Ensure you create a root partition and a swap partition. After finishing, return here."
+dialog --msgbox "Please use a partitioning tool (like fdisk or cfdisk) to partition your disk. Once done, click OK." 8 60
+dialog --msgbox "Ensure you create a root partition and a swap partition. After finishing, return here." 8 60
 
 # Wait for user to finish partitioning
 read -p "Press Enter once you have completed partitioning..."
 
 # Step 4: Get Filesystem Type
-FILESYSTEM=$(zenity --list --title="Select Filesystem Type" --column="Filesystem" --text="Choose a filesystem for the root partition:" --radiolist --column "Select" --column "Filesystem" TRUE "ext4" FALSE "btrfs" FALSE "xfs" FALSE "f2fs" FALSE "other")
+FILESYSTEM=$(dialog --menu "Choose a filesystem for the root partition:" 15 50 4 \
+    1 "ext4" \
+    2 "btrfs" \
+    3 "xfs" \
+    4 "f2fs" 3>&1 1>&2 2>&3 3>&-)
 
 # Step 5: Format Partitions
-if [[ $FILESYSTEM == "ext4" ]]; then
+if [[ $FILESYSTEM == "1" ]]; then
     mkfs.ext4 ${DISK}1
-elif [[ $FILESYSTEM == "btrfs" ]]; then
+elif [[ $FILESYSTEM == "2" ]]; then
     mkfs.btrfs ${DISK}1
-elif [[ $FILESYSTEM == "xfs" ]]; then
+elif [[ $FILESYSTEM == "3" ]]; then
     mkfs.xfs ${DISK}1
-elif [[ $FILESYSTEM == "f2fs" ]]; then
+elif [[ $FILESYSTEM == "4" ]]; then
     mkfs.f2fs ${DISK}1
 else
-    zenity --error --text="Unsupported filesystem type!"
+    dialog --msgbox "Unsupported filesystem type!" 8 40
     exit 1
 fi
 
@@ -46,7 +50,7 @@ mount ${DISK}1 /mnt
 swapon ${DISK}2
 
 # Step 8: Install Base System
-PACKAGES=$(zenity --entry --title="Package Selection" --text="Enter additional packages to install (space-separated), or leave blank for defaults:" --entry-text="vim nano")
+PACKAGES=$(dialog --inputbox "Enter additional packages to install (space-separated), or leave blank for defaults:" 8 60 "vim nano" 3>&1 1>&2 2>&3 3>&-)
 DEFAULT_PACKAGES="base linux linux-firmware"
 FULL_PACKAGE_LIST="$DEFAULT_PACKAGES $PACKAGES"
 
@@ -59,7 +63,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 arch-chroot /mnt /bin/bash <<EOF
 
 # Step 11: Set Time Zone
-TIMEZONE=$(zenity --entry --title="Set Time Zone" --text="Enter your time zone (e.g., America/New_York):" --entry-text="Region/City")
+TIMEZONE=$(dialog --inputbox "Enter your time zone (e.g., America/New_York):" 8 60 "Region/City" 3>&1 1>&2 2>&3 3>&-)
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
 
