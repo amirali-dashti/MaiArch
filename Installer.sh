@@ -14,6 +14,7 @@ USERNAME=""
 PASSWORD=""
 ROOT_PASSWORD=""
 DISK=""
+EFI_PARTITION=""  # For UEFI systems, if applicable
 
 # Function to show an error message
 function error_message() {
@@ -43,6 +44,11 @@ function choose_disk() {
     if [ -z "$DISK" ]; then
         error_message "Disk cannot be empty."
     fi
+
+    # Check if the disk exists
+    if [ ! -b "$DISK" ]; then
+        error_message "Disk $DISK does not exist."
+    fi
 }
 
 # Function to get user credentials
@@ -63,11 +69,23 @@ function get_user_credentials() {
     fi
 }
 
+# Function to choose EFI partition for UEFI systems
+function choose_efi_partition() {
+    EFI_PARTITION=$(dialog --inputbox "Enter your EFI partition (e.g., /dev/sda1, leave blank for BIOS):" 8 40 3>&1 1>&2 2>&3)
+}
+
 # Get user inputs
 get_hostname
 choose_timezone
 choose_disk
 get_user_credentials
+
+# Determine if the system is UEFI
+if [[ "$DISK" == /dev/nvme* ]]; then
+    choose_efi_partition
+else
+    EFI_PARTITION=""
+fi
 
 # Update the system clock
 timedatectl set-ntp true
@@ -116,11 +134,26 @@ echo "root:$ROOT_PASSWORD" | chpasswd
 pacman -S --noconfirm sudo
 echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
+# Install GRUB
+pacman -S --noconfirm grub os-prober
+
+# Install GRUB to the disk
+if [ -n "$EFI_PARTITION" ]; then
+    # For UEFI systems
+    mkdir -p /boot/efi
+    mount "$EFI_PARTITION" /boot/efi
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+else
+    # For BIOS systems
+    grub-install --target=i386-pc $DISK
+fi
+
+# Generate GRUB configuration
+grub-mkconfig -o /boot/grub/grub.cfg
+
 # Exit chroot
 EOF
 
 # Unmount and reboot
 umount -R /mnt
 dialog --msgbox "Installation complete! You can now reboot." 6 60
-# Uncomment the next line if you want to reboot automatically
-# reboot
