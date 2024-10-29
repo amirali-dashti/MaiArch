@@ -22,13 +22,13 @@ else
 fi
 
 # Check for internet connection
-if ! ping -c 1 google.com &> /dev/null; then
+if ! ping -c 1 8.8.8.8 &> /dev/null; then
     dialog --msgbox "No internet connection detected. Please set up your connection with iwctl or mmcli, then try again." 12 70
     exit 1
 fi
 
 # List available disks
-lsblk
+lsblk | dialog --textbox - 20 70
 
 # Prompt user for installation parameters using dialog
 DISK=$(dialog --inputbox "Enter the disk to install to (e.g., /dev/sda, /dev/nvme0n1):" 8 60 3>&1 1>&2 2>&3 3>&-)
@@ -37,8 +37,12 @@ USERNAME=$(dialog --inputbox "Enter the username for the user account to be crea
 
 # Prompt for timezone until valid
 TIMEZONE=""
-while ! [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; do
+while true; do
     TIMEZONE=$(dialog --inputbox "Enter your timezone (e.g., America/New_York):" 8 60 3>&1 1>&2 2>&3 3>&-)
+    if [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; then
+        break
+    fi
+    dialog --msgbox "Invalid timezone. Please try again." 5 30
 done
 
 ## STAGE 2: PARTITIONING ##
@@ -63,35 +67,35 @@ fi
 # Partition the disk
 if [ "$BIOS" = true ]; then
     dialog --infobox "Partitioning disk $DISK for BIOS system." 5 50
-    parted -s "$DISK" mklabel msdos
-    parted -s "$DISK" mkpart primary linux-swap 1MiB 513MiB
-    parted -s "$DISK" mkpart primary ext4 513MiB 100%
+    parted "$DISK" mklabel msdos
+    parted "$DISK" mkpart primary linux-swap 1MiB 513MiB
+    parted "$DISK" mkpart primary ext4 513MiB 100% || exit 1
 
     # Format partitions
-    mkswap "${DISK}1"
-    mkfs.ext4 "${DISK}2"
+    mkswap "${DISK}1" || exit 1
+    mkfs.ext4 "${DISK}2" || exit 1
 
     # Mount partitions
-    mount "${DISK}2" /mnt
-    swapon "${DISK}1"
+    mount "${DISK}2" /mnt || exit 1
+    swapon "${DISK}1" || exit 1
 
 else
     dialog --infobox "Partitioning disk $DISK for UEFI system." 5 50
-    parted -s "$DISK" mklabel gpt
-    parted -s "$DISK" mkpart primary fat32 1MiB 1025MiB
-    parted -s "$DISK" mkpart primary linux-swap 1025MiB 1537MiB
-    parted -s "$DISK" mkpart primary ext4 1537MiB 100%
+    parted "$DISK" mklabel gpt
+    parted "$DISK" mkpart primary fat32 1MiB 1025MiB
+    parted "$DISK" mkpart primary linux-swap 1025MiB 1537MiB
+    parted "$DISK" mkpart primary ext4 1537MiB 100% || exit 1
 
     # Format partitions
-    mkfs.fat -F 32 "${DISK}1"
-    mkswap "${DISK}2"
-    mkfs.ext4 "${DISK}3"
+    mkfs.fat -F 32 "${DISK}1" || exit 1
+    mkswap "${DISK}2" || exit 1
+    mkfs.ext4 "${DISK}3" || exit 1
 
     # Mount partitions
-    mount "${DISK}3" /mnt
-    swapon "${DISK}2"
+    mount "${DISK}3" /mnt || exit 1
+    swapon "${DISK}2" || exit 1
     mkdir -p /mnt/boot
-    mount "${DISK}1" /mnt/boot
+    mount "${DISK}1" /mnt/boot || exit 1
 fi
 
 # Generate fstab
@@ -132,12 +136,12 @@ echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
 
 # Install GRUB
 if [ "$UEFI" = true ]; then
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || exit 1
 else
-    grub-install --target=i386-pc "$DISK"
+    grub-install --target=i386-pc "$DISK" || exit 1
 fi
 
-grub-mkconfig -o /boot/grub/grub.cfg
+grub-mkconfig -o /boot/grub/grub.cfg || exit 1
 EOF
 
 dialog --msgbox "Final configuration complete." 8 40
