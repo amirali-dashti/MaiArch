@@ -3,7 +3,7 @@
 # Install dialog if not present
 if ! command -v dialog &> /dev/null; then
   echo "Installing dialog for CLI-based interface..."
-  sudo pacman -Sy --noconfirm dialog
+  sudo pacman -Sy --noconfirm dialog || { echo "Failed to install dialog. Exiting." >&2; exit 1; }
 fi
 
 LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Log file for installation process
@@ -24,7 +24,7 @@ fi
 function rollback() {
   log "Starting rollback due to an error..."
   for action in "${ROLLBACK_STACK[@]}"; do
-    eval "$action" && log "Rolled back: $action"
+    eval "$action" && log "Rolled back: $action" || log "Failed to roll back: $action"
   done
   dialog --title "Installation Error" --msgbox "Installation failed. Rolled back changes. Please check the log at $LOG_FILE." 10 50
   exit 1
@@ -32,11 +32,11 @@ function rollback() {
 
 # Check for internet connectivity
 function check_internet() {
-  if ping -c 1 google.com &>/dev/null; then
-    log "Internet connection detected."
-  else
+  if ! ping -c 1 google.com &>/dev/null; then
     dialog --title "Error" --msgbox "No internet connection detected. Please check your network settings." 8 60
     exit 1
+  else
+    log "Internet connection detected."
   fi
 }
 
@@ -51,39 +51,21 @@ function select_disk() {
 
 # Partition disk using parted
 function partition_disk() {
-  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically or manually. If you choose to partition automatically, it will erase all data on the disk." 10 80
+  dialog --title "Partitioning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 10 80
+  log "Creating GPT partition table and partitions on $DISK..."
 
-  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 60 2 \
-    1 "Automatically partition the entire disk" \
-    2 "Manually partition the disk using parted" 3>&1 1>&2 2>&3)
+  # Creating GPT and partitions
+  parted "$DISK" mklabel gpt || rollback
+  parted "$DISK" mkpart primary fat32 1MiB 513MiB || rollback
+  parted "$DISK" set 1 esp on || rollback
+  parted "$DISK" mkpart primary ext4 513MiB 100% || rollback
 
-  case "$PARTITION_OPTION" in
-    1)
-      log "Automatically partitioning $DISK..."
-      # Create GPT partition table and partitions
-      parted "$DISK" mklabel gpt || rollback
-      parted "$DISK" mkpart primary fat32 1MiB 513MiB || rollback
-      parted "$DISK" set 1 esp on || rollback
-      parted "$DISK" mkpart primary 513MiB 100% || rollback
-      
-      # Create physical volume
-      pvcreate "${DISK}2" || rollback
-      # Create volume group
-      vgcreate vg0 "${DISK}2" || rollback
-      # Create logical volumes
-      lvcreate -L 16G vg0 -n swap || rollback
-      lvcreate -L 512M vg0 -n boot || rollback
-      lvcreate -l 100%FREE vg0 -n root || rollback
-      ;;
-    2)
-      dialog --title "Manual Partitioning" --msgbox "Please partition your disk manually using parted commands, then press OK to continue." 10 80
-      parted "$DISK"
-      ;;
-    *)
-      dialog --title "Error" --msgbox "Invalid option selected." 6 40
-      exit 1
-      ;;
-  esac
+  # Create physical volume and logical volumes
+  pvcreate "${DISK}2" || rollback
+  vgcreate vg0 "${DISK}2" || rollback
+  lvcreate -L 16G vg0 -n swap || rollback
+  lvcreate -L 512M vg0 -n boot || rollback
+  lvcreate -l 100%FREE vg0 -n root || rollback
 }
 
 # Format partitions with validation and rollback on failure
@@ -113,8 +95,7 @@ function install_base_system() {
 # Generate fstab with validation
 function generate_fstab() {
   log "Generating fstab..."
-  genfstab -U /mnt >> /mnt/etc/fstab
-  if [[ $? -ne 0 ]]; then
+  if ! genfstab -U /mnt >> /mnt/etc/fstab; then
     log "fstab generation failed!"
     rollback
   fi
@@ -178,16 +159,16 @@ function install_gui() {
   arch-chroot /mnt /bin/bash <<EOF
   case "$GUI_CHOICE" in
     1)
-      pacman --noconfirm -S gnome gnome-extra gdm
-      systemctl enable gdm
+      pacman --noconfirm -S gnome gnome-extra gdm || { echo "GNOME installation failed!" >&2; exit 1; }
+      systemctl enable gdm || { echo "Failed to enable GDM!" >&2; exit 1; }
       ;;
     2)
-      pacman --noconfirm -S plasma kde-applications sddm
-      systemctl enable sddm
+      pacman --noconfirm -S plasma kde-applications sddm || { echo "KDE installation failed!" >&2; exit 1; }
+      systemctl enable sddm || { echo "Failed to enable SDDM!" >&2; exit 1; }
       ;;
     3)
-      pacman --noconfirm -S xfce4 xfce4-goodies lightdm lightdm-gtk-greeter
-      systemctl enable lightdm
+      pacman --noconfirm -S xfce4 xfce4-goodies lightdm lightdm-gtk-greeter || { echo "XFCE installation failed!" >&2; exit 1; }
+      systemctl enable lightdm || { echo "Failed to enable LightDM!" >&2; exit 1; }
       ;;
   esac
 EOF
@@ -201,15 +182,13 @@ EOF
 # Unmount partitions
 function unmount_partitions() {
   log "Unmounting partitions..."
-  umount -R /mnt
+  umount -R /mnt || { log "Failed to unmount partitions."; exit 1; }
 }
 
 # Main script flow
 log "Starting CLI-based MaiArch installation script..."
 check_internet
 select_disk
-
-dialog --title "Warning" --msgbox "Automatic partitioning will erase ALL data on the selected disk!" 8 70
 
 partition_disk
 format_partitions
