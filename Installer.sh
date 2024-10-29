@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Define the output JSON file
-json_file="install_config.json"
-
 # Function to display an error message and exit
 function error_exit {
     dialog --msgbox "$1" 6 40
@@ -13,7 +10,7 @@ function error_exit {
 disk=$(dialog --title "Disk Selection" --menu "Select a disk to install Arch Linux:" 15 50 4 \
 1 "/dev/sda" \
 2 "/dev/sdb" \
-3 "/dev/nvme0n1 \
+3 "/dev/nvme0n1" \
 4 "Exit" 3>&1 1>&2 2>&3) || error_exit "Disk selection cancelled."
 
 # Collect username and password
@@ -44,6 +41,9 @@ packages=$(dialog --title "Package Selection" --checklist "Select additional pac
 4 "networkmanager" off \
 5 "Exit" 3>&1 1>&2 2>&3) || error_exit "Package selection cancelled."
 
+# Prompt for JSON file save path
+config_path=$(dialog --inputbox "Enter the path to save the configuration file:" 8 40 "$HOME/install_config.json" 3>&1 1>&2 2>&3) || error_exit "Path entry cancelled."
+
 # Create the JSON structure
 json_content=$(cat <<EOF
 {
@@ -57,11 +57,11 @@ json_content=$(cat <<EOF
 EOF
 )
 
-# Save to JSON file
-echo "$json_content" > "$json_file"
+# Save to the specified JSON file
+echo "$json_content" > "$config_path"
 
 # Inform the user
-dialog --msgbox "Configuration saved to $json_file" 5 30
+dialog --msgbox "Configuration saved to $config_path" 5 40
 
 # Run archinstall with the generated JSON file
-archinstall --config "$json_file"
+archinstall --config "$config_path"
