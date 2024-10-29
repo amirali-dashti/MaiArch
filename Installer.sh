@@ -2,17 +2,11 @@
 
 # Install dialog if not present
 if ! command -v dialog &> /dev/null; then
-  echo "Installing dialog for CLI-based GUI..."
+  echo "Installing dialog for CLI-based interface..."
   sudo pacman -Sy --noconfirm dialog
 fi
 
-# Install GParted if not present
-if ! command -v gparted &> /dev/null; then
-  echo "Installing GParted for partitioning..."
-  sudo pacman -Sy --noconfirm gparted
-fi
-
-LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Changed log file name to include MaiArch
+LOG_FILE="/var/log/maiarch_install_cli_gui.log"  # Log file for installation process
 ROLLBACK_STACK=()
 
 # Function to log messages
@@ -55,21 +49,22 @@ function select_disk() {
   fi
 }
 
-# Partition disk with LVM or GParted
+# Partition disk using parted
 function partition_disk() {
-  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically, manually, or using GParted. If you choose to partition automatically, it will erase all data on the disk." 10 80
+  dialog --title "Partitioning" --msgbox "You can choose to partition the disk automatically or manually. If you choose to partition automatically, it will erase all data on the disk." 10 80
 
-  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 60 3 \
+  PARTITION_OPTION=$(dialog --title "Partitioning Option" --menu "Select an option:" 15 60 2 \
     1 "Automatically partition the entire disk" \
-    2 "Manually partition the disk using cfdisk" \
-    3 "Use GParted for partitioning" 3>&1 1>&2 2>&3)
+    2 "Manually partition the disk using parted" 3>&1 1>&2 2>&3)
 
   case "$PARTITION_OPTION" in
     1)
       log "Automatically partitioning $DISK..."
-      sgdisk --zap-all "$DISK" || rollback
-      sgdisk --new=1:0:+512M --typecode=1:ef00 --change-name=1:EFI "$DISK" || rollback
-      sgdisk --new=2:0:0 --typecode=2:8e00 --change-name=2:LVM "$DISK" || rollback
+      # Create GPT partition table and partitions
+      parted "$DISK" mklabel gpt || rollback
+      parted "$DISK" mkpart primary fat32 1MiB 513MiB || rollback
+      parted "$DISK" set 1 esp on || rollback
+      parted "$DISK" mkpart primary 513MiB 100% || rollback
       
       # Create physical volume
       pvcreate "${DISK}2" || rollback
@@ -81,27 +76,14 @@ function partition_disk() {
       lvcreate -l 100%FREE vg0 -n root || rollback
       ;;
     2)
-      dialog --title "Manual Partitioning" --msgbox "Please partition your disk manually using cfdisk, then press OK to continue." 8 50
-      cfdisk "$DISK"
-      ;;
-    3)
-      partition_disk_with_gparted  # Call the GParted function
+      dialog --title "Manual Partitioning" --msgbox "Please partition your disk manually using parted commands, then press OK to continue." 10 80
+      parted "$DISK"
       ;;
     *)
       dialog --title "Error" --msgbox "Invalid option selected." 6 40
       exit 1
       ;;
   esac
-}
-
-# Function to partition disk using GParted
-function partition_disk_with_gparted() {
-  dialog --title "Manual Partitioning" --msgbox "You can now use GParted to partition your disk. Please perform your actions and close the application when done." 10 80
-  gparted "$DISK"  # Launch GParted for the user
-  if [[ $? -ne 0 ]]; then
-    dialog --title "Error" --msgbox "Failed to launch GParted. Please install it manually." 8 50
-    exit 1
-  fi
 }
 
 # Format partitions with validation and rollback on failure
