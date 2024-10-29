@@ -1,6 +1,13 @@
 #!/bin/bash
 
-# Function to display error message and exit
+# Synopsys: This file is intended to run on a LiveCD Arch Linux system
+# and is designed to install a base system to a specified disk, along with
+# necessary packages and configuration files.
+
+# Proper usage to run this script:
+# wget https://raw.githubusercontent.com/portalmaster137/ArchyBootstrapper/main/booter.sh | chmod +x booter.sh | ./booter.sh
+
+# Function to display an error message and exit
 error_exit() {
     dialog --msgbox "$1" 8 40
     exit 1
@@ -8,113 +15,116 @@ error_exit() {
 
 # Function to check if a command exists
 check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        error_exit "$1 is not installed. Please install it first."
-    fi
+    command -v "$1" &> /dev/null || error_exit "$1 is not installed. Please install it first."
 }
 
-# Check if dialog is installed, install if not
+# Check if dialog is installed
 check_command dialog
 
-# Step 1: Get User Input
-HOSTNAME=$(dialog --inputbox "Enter the hostname for your system:" 8 40 myarch 3>&1 1>&2 2>&3 3>&-)
-if [ -z "$HOSTNAME" ]; then
-    error_exit "Hostname cannot be empty."
-fi
+## STAGE 1 : CONFIGURATION ##
 
-USERNAME=$(dialog --inputbox "Enter your username:" 8 40 user 3>&1 1>&2 2>&3 3>&-)
-if [ -z "$USERNAME" ]; then
-    error_exit "Username cannot be empty."
-fi
-
-PASSWORD=$(dialog --inputbox "Enter your password:" 8 40 password 3>&1 1>&2 2>&3 3>&-)
-if [ -z "$PASSWORD" ]; then
-    error_exit "Password cannot be empty."
-fi
-
-ROOT_PASSWORD=$(dialog --inputbox "Enter root password:" 8 40 rootpassword 3>&1 1>&2 2>&3 3>&-)
-if [ -z "$ROOT_PASSWORD" ]; then
-    error_exit "Root password cannot be empty."
-fi
-
-# Step 2: Disk Selection
-DISK=$(dialog --inputbox "Enter the disk you want to install Arch Linux on (e.g., /dev/sda):" 8 40 /dev/sdX 3>&1 1>&2 2>&3 3>&-)
-if [ ! -b "$DISK" ]; then
-    error_exit "$DISK is not a valid block device. Please check the disk name."
-fi
-
-# Step 3: Choose Partitioning Method
-PARTITION_METHOD=$(dialog --menu "Choose how to partition the disk:" 15 50 2 \
-    1 "Manual Partitioning (Use fdisk/cfdisk)" \
-    2 "Automated Partitioning (Erase and use defaults)" 3>&1 1>&2 2>&3 3>&-)
-
-# Step 4: Partition the Disk
-if [ "$PARTITION_METHOD" -eq 1 ]; then
-    dialog --msgbox "Please use a partitioning tool (like fdisk or cfdisk) to partition your disk. Once done, click OK." 8 60
-    dialog --msgbox "Ensure you create a root partition and a swap partition. After finishing, return here." 8 60
-    read -p "Press Enter once you have completed partitioning..."
+# Determine if this is a UEFI or BIOS system
+BIOS=False
+UEFI=False
+if [ -d "/sys/firmware/efi/efivars" ]; then
+    [ $(cat /sys/firmware/efi/fw_platform_size) -eq 32 ] && error_exit "32-bit UEFI systems are not supported."
+    UEFI=True
 else
-    dialog --msgbox "Automated partitioning will erase all data on ${DISK}. Proceed with caution!" 8 60
-    sleep 2
-
-    # Automated partitioning (example: using sgdisk)
-    echo -e "o\nY\nn\n1\n\n+20G\n83\nn\n2\n\n\n82\nw\nY" | sgdisk --batch - "${DISK}" || error_exit "Automated partitioning failed."
-
-    # Format the partitions
-    mkfs.ext4 ${DISK}1 || error_exit "Failed to format ${DISK}1 with ext4."
-    mkswap ${DISK}2 || error_exit "Failed to create swap on ${DISK}2."
+    BIOS=True
 fi
 
-# Step 5: Mount Filesystems
-mount ${DISK}1 /mnt || error_exit "Failed to mount ${DISK}1."
-swapon ${DISK}2 || error_exit "Failed to enable swap on ${DISK}2."
+# Check for internet connection
+ping -c 1 google.com &> /dev/null || error_exit "No internet connection detected."
 
-# Step 6: Install Base System
-PACKAGES=$(dialog --inputbox "Enter additional packages to install (space-separated), or leave blank for defaults:" 8 60 "vim nano" 3>&1 1>&2 2>&3 3>&-)
-DEFAULT_PACKAGES="base linux linux-firmware"
-FULL_PACKAGE_LIST="$DEFAULT_PACKAGES $PACKAGES"
+lsblk
 
-pacstrap /mnt $FULL_PACKAGE_LIST || error_exit "Failed to install base system."
+# Prompt for installation disk
+DISK=$(dialog --inputbox "Please enter the disk to install to (e.g., /dev/sda):" 8 40 3>&1 1>&2 2>&3)
+[ ! -b "$DISK" ] && error_exit "$DISK is not a valid block device."
 
-# Step 7: Generate fstab
-genfstab -U /mnt >> /mnt/etc/fstab || error_exit "Failed to generate fstab."
+# Prompt for hostname
+HOSTNAME=$(dialog --inputbox "Please enter the hostname of the system:" 8 40 "myarch" 3>&1 1>&2 2>&3)
 
-# Step 8: Chroot into the new system
+# Prompt for username
+USERNAME=$(dialog --inputbox "Please enter the username of the user account to be created:" 8 40 "user" 3>&1 1>&2 2>&3)
+
+# Prompt for timezone with validation
+while true; do
+    dTIMEZONE=$(dialog --inputbox "Please enter your timezone (e.g., America/New_York):" 8 40 "America/New_York" 3>&1 1>&2 2>&3)
+    [ -f "/usr/share/zoneinfo/$dTIMEZONE" ] && break
+    dialog --msgbox "Invalid timezone. Please try again." 8 40
+done
+TIMEZONE=$dTIMEZONE
+
+## STAGE 2 : PARTITIONING ##
+
+# Confirm partitioning
+dialog --yesno "The following disk will be partitioned: $DISK\nThis will erase all data on the disk.\nAre you sure you want to continue?" 8 60
+[ $? -ne 0 ] && exit 1
+
+# Check disk size
+[ $(lsblk -b -n -o SIZE $DISK) -lt 15000000000 ] && error_exit "Disk $DISK is too small. It must be at least 15GB."
+
+# Partition the disk
+if [ "$BIOS" = True ]; then
+    dialog --msgbox "Partitioning disk $DISK for BIOS system." 8 40
+    parted -s $DISK mklabel msdos
+    parted -s $DISK mkpart primary linux-swap 1MiB 513MiB
+    parted -s $DISK mkpart primary ext4 513MiB 100%
+    mkswap ${DISK}1
+    mkfs.ext4 ${DISK}2
+    mount ${DISK}2 /mnt
+    swapon ${DISK}1
+else
+    dialog --msgbox "Partitioning disk $DISK for UEFI system." 8 40
+    parted -s $DISK mklabel gpt
+    parted -s $DISK mkpart primary fat32 1MiB 1025MiB
+    parted -s $DISK mkpart primary linux-swap 1025MiB 1537MiB
+    parted -s $DISK mkpart primary ext4 1537MiB 100%
+    mkfs.fat -F 32 ${DISK}1
+    mkswap ${DISK}2
+    mkfs.ext4 ${DISK}3
+    mount ${DISK}3 /mnt
+    swapon ${DISK}2
+    mount --mkdir ${DISK}1 /mnt/boot
+fi
+
+dialog --msgbox "Generating fstab." 8 40
+genfstab -U /mnt >> /mnt/etc/fstab 
+
+dialog --msgbox "Disk $DISK has been partitioned and mounted." 8 40
+
+dialog --msgbox "Updating Mirrorlist." 8 40
+reflector --latest 200 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 
+
+## STAGE 3 : INSTALLATION ##
+dialog --msgbox "Installing base system." 8 40
+pacstrap -k /mnt base linux linux-firmware sof-firmware NetworkManager vim nano sudo grub efibootmgr elinks git reflector
+
+dialog --msgbox "Base system installed." 8 40
+
+## STAGE 4 : SYSTEM CONFIGURATION ##
+dialog --msgbox "Doing final configuration." 8 40
+
 arch-chroot /mnt /bin/bash <<EOF
-
-# Step 9: Set Time Zone
-TIMEZONE=$(dialog --inputbox "Enter your time zone (e.g., America/New_York):" 8 60 "Region/City" 3>&1 1>&2 2>&3 3>&-)
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime || exit 1
-hwclock --systohc || exit 1
-
-# Step 10: Localization
+echo "$HOSTNAME" > /etc/hostname
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 echo "KEYMAP=us" > /etc/vconsole.conf
-echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
-locale-gen || exit 1
-
-# Step 11: Set Hostname
-echo "$HOSTNAME" > /etc/hostname || exit 1
-cat <<EOL >> /etc/hosts
-127.0.0.1    localhost
-::1          localhost
-127.0.1.1    $HOSTNAME.localdomain  $HOSTNAME
-EOL
-
-# Step 12: Create User
-useradd -m -G wheel $USERNAME || exit 1
-echo "$USERNAME:$PASSWORD" | chpasswd || exit 1
-echo "root:$ROOT_PASSWORD" | chpasswd || exit 1
-echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers || exit 1
-
-# Step 13: Install Bootloader
-pacman -S --noconfirm grub || exit 1
-grub-install --target=i386-pc $DISK || exit 1
-grub-mkconfig -o /boot/grub/grub.cfg || exit 1
-
+systemctl enable NetworkManager
+echo "root:root" | chpasswd
+useradd -m -G wheel -s /bin/bash $USERNAME
+echo "$USERNAME:$USERNAME" | chpasswd
+echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
 EOF
 
-# Step 14: Unmount and Prompt to Reboot
-umount -R /mnt || error_exit "Failed to unmount partitions."
-dialog --msgbox "Installation is complete! Please reboot your system to start using Arch Linux." 8 60
-echo "Installation completed successfully. You can reboot your system now."
+dialog --msgbox "Final configuration complete." 8 40
+
+umount -R /mnt
+
+dialog --msgbox "Installation complete." 8 40
