@@ -74,6 +74,36 @@ function choose_efi_partition() {
     EFI_PARTITION=$(dialog --inputbox "Enter your EFI partition (e.g., /dev/sda1, leave blank for BIOS):" 8 40 3>&1 1>&2 2>&3)
 }
 
+# Function to choose GUI
+function choose_gui() {
+    GUI=$(dialog --menu "Choose a GUI to install:" 15 50 3 \
+    1 "GNOME" \
+    2 "KDE Plasma" \
+    3 "Xfce" \
+    3>&1 1>&2 2>&3)
+
+    case $GUI in
+        1)  # Install GNOME
+            echo "Installing GNOME..."
+            pacman -S --noconfirm gnome gnome-extra
+            systemctl enable gdm.service
+            ;;
+        2)  # Install KDE Plasma
+            echo "Installing KDE Plasma..."
+            pacman -S --noconfirm plasma kde-applications
+            systemctl enable sddm.service
+            ;;
+        3)  # Install Xfce
+            echo "Installing Xfce..."
+            pacman -S --noconfirm xfce4 xfce4-goodies
+            systemctl enable lightdm.service
+            ;;
+        *)
+            error_message "Invalid choice."
+            ;;
+    esac
+}
+
 # Get user inputs
 get_hostname
 choose_timezone
@@ -145,11 +175,14 @@ if [ -n "$EFI_PARTITION" ]; then
     grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
 else
     # For BIOS systems
-    grub-install --target=i386-pc $DISK
+    grub-install --target=i386-pc --boot-directory=/boot $DISK
 fi
 
 # Generate GRUB configuration
 grub-mkconfig -o /boot/grub/grub.cfg
+
+# Prompt user for GUI installation
+choose_gui
 
 # Exit chroot
 EOF
