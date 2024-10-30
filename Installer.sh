@@ -114,4 +114,3 @@ finalize_installation
 # Wrap up
 dialog --title "Installation Complete" --msgbox "Arch Linux installation is complete. You may reboot now." 10 50
 umount -R /mnt
-reboot
