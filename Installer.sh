@@ -9,29 +9,47 @@ fi
 # Check for dialog's existence (sonzai - existence)
 if ! command -v dialog &> /dev/null; then
   echo "dialog is required for user interaction. Installing..."
-  pacman -S --noconfirm dialog
+  pacman -S --noconfirm dialog || { echo "Failed to install 'dialog'. Exiting."; exit 1; }
 fi
+
+# Variables
+REPO_URL="https://github.com/archlinux/archinstall.git"
+INSTALL_SCRIPT="archinstall/archinstall/scripts/Installer.py"
 
 # Welcome Message
 dialog --title "Welcome to MaiArch Installation" \
 --msgbox "WARNING: THIS OS IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Installer!" 15 50
 
 # Confirmation Dialog
-if ! dialog --title "MaiArch Installation Confirmation" --yesno "By pressing the 'yes' button, MaiArch will get installed. The process contains the base installation of the Operating System via the 'archinstall' package. Then, the process will get continued with installing more packages. Including but not limited to 'Cortex Penguin' and 'OmniPkg'. (The source code of both are available on https://github.com/devtracer)" 7 50; then
+if ! dialog --title "MaiArch Installation Confirmation" \
+   --yesno "By pressing 'yes', MaiArch will be installed. This includes:\n- Base OS installation\n- Additional packages: 'Cortex Penguin' and 'OmniPkg' (see https://github.com/devtracer)." 15 50; then
   dialog --msgbox "Installation canceled. You can restart anytime." 5 40
   exit 1
 fi
 
-sudo pacman -Sy git
-sudo pacman -Sy git
+# Install required packages
+pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
 
-git clone https://github.com/archlinux/archinstall.git
+# Clone the archinstall repository
+git clone "$REPO_URL" || { echo "Failed to clone repository. Exiting."; exit 1; }
 
-mv Installer.py archinstall/archinstall/scripts/
+# Move custom installer script
+mv Installer.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
 
-python archinstall/archinstall/scripts/Installer.py
+# Run the custom installer
+python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; exit 1; }
 
+# Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
 
+# Install additional software
+dialog --msgbox "Continuing with Installing Wine, Chromium, and LibreOffice." 5 40
+pacman -S --noconfirm wine chromium libreoffice || { echo "Failed to install additional packages. Exiting."; exit 1; }
 
-dialog --msgbox "Installation completed.\nThanks for choosing MaiArch!\nIf you found any problem/bug, please report it at https://www.github.com/devtracer/MaiArch\nThe system will get rebooted." 5 40
+# Completion Message and Reboot Prompt
+dialog --msgbox "Installation completed.\nThanks for choosing MaiArch!\nPlease report issues at https://www.github.com/devtracer/MaiArch." 8 50
+if dialog --yesno "Would you like to reboot now?" 5 40; then
+  reboot
+else
+  dialog --msgbox "You chose not to reboot. Remember to restart your system to apply changes." 5 40
+fi
