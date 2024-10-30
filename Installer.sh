@@ -29,7 +29,7 @@ sleep 2  # Delay for user readability (optional)
 # Run the Arch Install process using archinstall's source code
 git clone https://github.com/archlinux/archinstall.git
 
-python archinstall/archinstall/__main__.py
+python archinstall/examples/minimal_installation.py
 
 
 if [ $? -ne 0 ]; then
