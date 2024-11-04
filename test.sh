@@ -14,10 +14,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-
-dialog --msgbox  "WELCOME TO MAIARCH INSTALLER\nFrom now, everything will be\nbased on beta codes. BY CONTINUING, YOU WILL CONFIRM YOUR ACKNOWLEDGEMENT\nTHAT YOU HAVE UNDERSTOOD THAT THIS PROCESS CAN DAMAGE YOUR DEVICE." 10 25
-
-
 # Function to check internet connection
 speed_internet_connection() {
     if ping -c 1 archlinux.org &> /dev/null; then
@@ -29,12 +25,10 @@ speed_internet_connection() {
             "SSID:" 2 1 "" 2 20 20 0 \
             "Password:" 3 1 "" 3 20 20 0 2> /tmp/network_info
 
-        # Retrieve input
         network_interface=$(sed -n '1p' /tmp/network_info)
         ssid=$(sed -n '2p' /tmp/network_info)
         password=$(sed -n '3p' /tmp/network_info)
 
-        # Connect using iwctl
         iwctl station "$network_interface" connect "$ssid" --passphrase "$password" &>> "$LOG_FILE"
         if [ $? -ne 0 ]; then
             log "Failed to connect to network $ssid."
@@ -58,32 +52,53 @@ time_sync() {
     fi
 }
 
-# Function for partitioning and formatting the disk
+# Function for partitioning and formatting the disk with wipe option
 partition_formatting_process() {
     dialog --inputbox "Enter the disk to partition (e.g., /dev/sda):" 10 40 2> /tmp/disk_choice
     disk_choice=$(< /tmp/disk_choice)
 
-    # Confirm disk partitioning and formatting
-    dialog --yesno "This will partition and format $disk_choice. Are you sure?" 10 40
+    # Ask if the user wants to wipe the entire disk
+    dialog --yesno "WARNING: This will erase ALL data on $disk_choice. Do you want to continue?" 10 40
     if [ $? -eq 0 ]; then
-        fdisk "$disk_choice" &>> "$LOG_FILE"
-        if [ $? -ne 0 ]; then
-            log "Disk partitioning failed for $disk_choice."
-            exit 1
-        fi
+        # Confirm again for safety
+        dialog --yesno "Are you absolutely sure you want to wipe $disk_choice and use it for installation?" 10 40
+        if [ $? -eq 0 ]; then
+            # Wipe the disk
+            log "Wiping $disk_choice..."
+            wipefs -a "$disk_choice" &>> "$LOG_FILE"
+            sgdisk --zap-all "$disk_choice" &>> "$LOG_FILE"
+            if [ $? -ne 0 ]; then
+                log "Failed to wipe disk $disk_choice."
+                exit 1
+            fi
+            log "Disk $disk_choice wiped successfully."
 
-        mkfs.ext4 "${disk_choice}1" &>> "$LOG_FILE"
-        mkswap "${disk_choice}2" &>> "$LOG_FILE"
-        swapon "${disk_choice}2" &>> "$LOG_FILE"
-        mount "${disk_choice}1" /mnt &>> "$LOG_FILE"
-        if [ $? -ne 0 ]; then
-            log "Failed to mount ${disk_choice}1."
+            # Create new partition table with sfdisk
+            echo -e ",512M,S\n,,L" | sfdisk "$disk_choice" &>> "$LOG_FILE"
+            if [ $? -ne 0 ]; then
+                log "Disk partitioning failed for $disk_choice."
+                exit 1
+            fi
+
+            # Format the partitions
+            mkfs.ext4 "${disk_choice}1" &>> "$LOG_FILE"
+            mkswap "${disk_choice}2" &>> "$LOG_FILE"
+            swapon "${disk_choice}2" &>> "$LOG_FILE"
+            mount "${disk_choice}1" /mnt &>> "$LOG_FILE"
+            if [ $? -ne 0 ]; then
+                log "Failed to mount ${disk_choice}1."
+                exit 1
+            fi
+            log "Partitioning, formatting, and mounting completed for $disk_choice."
+        else
+            log "Disk wipe cancelled by user."
             exit 1
         fi
-        log "Partitioning and formatting completed for $disk_choice."
     else
-        log "Partition formatting cancelled."
-        exit 1
+        log "Disk wipe option declined. Proceeding without wiping."
+        
+        # Optional: Proceed with manual partitioning if desired
+        dialog --msgbox "Proceeding with manual partitioning on $disk_choice." 10 40
     fi
 }
 
@@ -123,7 +138,7 @@ username_password() {
 
 # Function to configure timezone
 timezone_configuration() {
-    dialog --inputbox "Enter your timezone (e.g., Region/City like 'America/New_York'):" 10 40 2> /tmp/timezone
+    dialog --inputbox "Enter your timezone (e.g., Region/City like 'Asia/Tehran'):" 10 40 2> /tmp/timezone
     timezone=$(< /tmp/timezone)
 
     arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$timezone" /etc/localtime &>> "$LOG_FILE"
