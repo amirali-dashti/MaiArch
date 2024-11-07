@@ -43,8 +43,16 @@ python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; e
 dialog --msgbox "The base has been installed." 5 40
 
 # Install additional software
-dialog --msgbox "Continuing with Installing Wine, Chromium, and LibreOffice." 5 40
-pacman -S --noconfirm wine chromium libreoffice || { echo "Failed to install additional packages. Exiting."; exit 1; }
+dialog --msgbox "Continuing with Installing 'Omnipkg', MaiArch's package manager." 5 40
+git clone https://github.com/devtracer/Omnipkg.git
+cd Omnipkg
+chmod +x omnipkginstall.sh
+sudo ./omnipkginstall.sh
+
+dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, Wine, vim, and etc!" 5 40
+omnipkg -a chromium
+omnipkg -a wine
+omnipkg -a vim
 
 # Completion Message and Reboot Prompt
 dialog --msgbox "Installation completed.\nThanks for choosing MaiArch!\nPlease report issues at https://www.github.com/devtracer/MaiArch." 8 50
