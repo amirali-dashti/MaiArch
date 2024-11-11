@@ -13,7 +13,7 @@ if ! command -v dialog &> /dev/null; then
 fi
 
 dialog --title "Welcome to MaiArch Installation" \
---msgbox "WARNING: THIS CUSTOMIZER IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Convertor!" 15 50
+--msgbox "Welcome again! we'll continue by installing needed additional packages." 15 50
 
 dialog --title "OmniPkg" \
 --msgbox "Installing OmniPkg, MaiArch's default package manager." 15 50
