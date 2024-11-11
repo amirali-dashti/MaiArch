@@ -42,17 +42,28 @@ python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; e
 # Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
 
+dialog --msgbox "Please stay available, as we need you for approving permissions." 5 40
+
 # Install additional software
 dialog --msgbox "Continuing with Installing 'Omnipkg', MaiArch's package manager." 5 40
-git clone https://github.com/devtracer/Omnipkg.git
-cd Omnipkg
+git clone https://github.com/devtracer/OmniPkg.git
+cd OmniPkg
 chmod +x omnipkginstall.sh
-sudo ./omnipkginstall.sh
+./omnipkginstall.sh
 
-dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, Wine, vim, and etc!" 5 40
-omnipkg -a chromium
-omnipkg -a wine
-omnipkg -a vim
+dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, and vim." 5 40
+omnipkg install chromium
+omnipkg install vim
+
+dialog --msgbox "Continuing with installing TuxTalk, MaiArch's AI assistant." 5 40
+
+cd ..
+
+git clone https://github.com/devtracer/TuxTalk.git
+cd TuxTalk
+chmod +x ./Installer.sh
+./Installer.sh
+
 
 # Completion Message and Reboot Prompt
 dialog --msgbox "Installation completed.\nThanks for choosing MaiArch!\nPlease report issues at https://www.github.com/devtracer/MaiArch." 8 50
