@@ -51,9 +51,11 @@ cd OmniPkg
 chmod +x omnipkginstall.sh
 ./omnipkginstall.sh
 
-dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, and vim." 5 40
+dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, vim, and wine (To have access to Windows apps on Linux)" 5 40
 omnipkg install chromium
 omnipkg install vim
+sudo pacman -S gtk3 gtk3-devel libnotify libnotify-devel
+omnipkg install winegui
 
 dialog --msgbox "Continuing with installing TuxTalk, MaiArch's AI assistant." 5 40
 
