@@ -18,7 +18,7 @@ INSTALL_SCRIPT="archinstall/archinstall/scripts/Installer.py"
 
 # Welcome Message
 dialog --title "Welcome to MaiArch Installation" \
---msgbox "WARNING: THIS OS IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Installer!" 15 50
+--msgbox "WARNING: THIS OS IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Installer!" 5 40
 
 # Confirmation Dialog
 if ! dialog --title "MaiArch Installation Confirmation" \
@@ -42,35 +42,6 @@ python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; e
 # Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
 
-dialog --msgbox "Please stay available, as we need you for approving permissions." 5 40
+dialog --msgbox "Rebooting your device to continue setting up additional required apps." 5 40
 
-# Install additional software
-dialog --msgbox "Continuing with Installing 'Omnipkg', MaiArch's package manager." 5 40
-git clone https://github.com/devtracer/OmniPkg.git
-cd OmniPkg
-chmod +x omnipkginstall.sh
-./omnipkginstall.sh
-
-dialog --msgbox "'Omnipkg' has been installed successfully. Continuing with installing Chromium, vim, and wine (To have access to Windows apps on Linux)" 5 40
-omnipkg install chromium
-omnipkg install vim
-sudo pacman -S gtk3 gtk3-devel libnotify libnotify-devel
-omnipkg install winegui
-
-dialog --msgbox "Continuing with installing TuxTalk, MaiArch's AI assistant." 5 40
-
-cd ..
-
-git clone https://github.com/devtracer/TuxTalk.git
-cd TuxTalk
-chmod +x ./Installer.sh
-./Installer.sh
-
-
-# Completion Message and Reboot Prompt
-dialog --msgbox "Installation completed.\nThanks for choosing MaiArch!\nPlease report issues at https://www.github.com/devtracer/MaiArch." 8 50
-if dialog --yesno "Would you like to reboot now?" 5 40; then
-  reboot
-else
-  dialog --msgbox "You chose not to reboot. Remember to restart your system to apply changes." 5 40
-fi
+reboot
