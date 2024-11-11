@@ -16,6 +16,35 @@ dialog --title "Welcome to MaiArch Installation" \
 --msgbox "Welcome again! we'll continue by installing needed additional packages." 15 50
 
 dialog --title "OmniPkg" \
+--msgbox "Installing wine, to have access to Windows apps via MaiArch." 15 50
+
+#!/bin/bash
+
+sudo pacman -Syu --noconfirm
+
+if ! grep -q "\[multilib\]" /etc/pacman.conf; then
+    echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf
+    sudo pacman -Syu --noconfirm
+fi
+
+sudo pacman -S --noconfirm wine wine-mono wine-gecko winetricks
+
+sudo pacman -S --noconfirm q4wine
+
+if ! command -v yay &> /dev/null; then
+    echo "Installing yay for AUR support..."
+    git clone https://aur.archlinux.org/yay.git
+    cd yay
+    makepkg -si --noconfirm
+    cd ..
+    rm -rf yay
+fi
+
+yay -S --noconfirm wine-staging
+echo "Wine, Wine GUI, and additional components have been installed successfully."
+
+
+dialog --title "OmniPkg" \
 --msgbox "Installing OmniPkg, MaiArch's default package manager." 15 50
 
 git clone https://github.com/devtracer/OmniPkg.git
