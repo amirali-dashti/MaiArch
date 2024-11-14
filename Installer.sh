@@ -42,6 +42,22 @@ python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; e
 # Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
 
-dialog --msgbox "Rebooting your device to continue setting up additional required apps." 5 40
+dialog --msgbox "Continuing with installing your side apps." 5 40
 
+dialog --msgbox "Starting with TuxTalk, MaiArch's AI assistant..." 5 40
+
+cd ¬/Downloads
+git clone https://github.com/devtracer/TuxTalk.git
+cd TuxTalk
+chmod +x ./Installer.sh
+./Installer.sh
+
+dialog --msgbox "Continuing with installing OmniPkg, MaiArch's default package manager..." 5 40
+cd ¬/Downloads
+git clone https://github.com/devtracer/OmniPkg.git
+cd OmniPkg
+chmod +x omnipkginstall.sh
+./omnipkginstall.sh
+
+dialog --msgbox "The installations's completed. Now we'll restart your device..." 5 40
 reboot
