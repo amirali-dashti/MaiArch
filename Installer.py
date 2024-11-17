@@ -109,3 +109,6 @@ else:
 
 VAL_KEYBIARDLAYOUT = MultiSelectInputWindow("Type your keyboard layouts (Example: en_US, separate multiple choices with comma.) leave blank for en_US")
 VAL_MIRROR = MultiSelectInputWindow("Choose your mirror: (The country's name is capitalized. separate multiple choices with comma.) leave blank for Worldwide")
+
+
+print(configs_dict)
