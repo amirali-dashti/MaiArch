@@ -1,6 +1,5 @@
 import subprocess
 
-
 def ButtonWindow(text):
     """Displays a message box with the given text."""
     subprocess.run(['dialog', '--msgbox', text, '10', '25'])
@@ -30,7 +29,7 @@ def OptionWindow(text, options):
     else:
         # Return None if the dialog was canceled
         return None
-    
+
 def InputWindow(prompt):
     """
     Displays an input dialog to receive a text entry from the user.
@@ -55,7 +54,7 @@ def SingleChoiceOptionWindow(text, options):
     option_str = []
     for i, option in enumerate(options):
         option_str.extend([str(i), option, "off"])
-    
+
     result = subprocess.run(
         ['dialog', '--radiolist', text, '12', '45', '25'] + option_str,
         capture_output=True,
@@ -66,7 +65,7 @@ def SingleChoiceOptionWindow(text, options):
         selected_index = int(result.stdout.strip())
         return options[selected_index]
     else:
-        return None    
+        return None
 
 def MultiSelectInputWindow(prompt):
     """
@@ -99,16 +98,31 @@ configs_dict = {
     "packages": ["docker", "git", "wget", "zsh"]
 }
 
+# Prompt for GUI selection
 VAL_GUI = OptionWindow("Choose between these GUIs (gnome is recommended)", ["gnome"])
 VAL_BOOTLOADER = SingleChoiceOptionWindow("Choose between these Bootloader (grub is recommended)", ["grub", "systemd-bootctl"])
 VAL_DEBUG = SingleChoiceOptionWindow("Enable or disable debug mode. (False is recommended)", ["False", "True"])
+
+# Convert VAL_DEBUG to boolean
 if VAL_DEBUG == "True":
     VAL_DEBUG = True
 else:
     VAL_DEBUG = False
 
-VAL_KEYBIARDLAYOUT = MultiSelectInputWindow("Type your keyboard layouts (Example: en_US, separate multiple choices with comma.) leave blank for en_US")
-VAL_MIRROR = MultiSelectInputWindow("Choose your mirror: (The country's name is capitalized. separate multiple choices with comma.) leave blank for Worldwide")
+# Prompt for keyboard layout input, with fallback to 'us' if left empty
+VAL_KEYBOARDLAYOUT = MultiSelectInputWindow("Type your keyboard layouts (Example: en_US, separate multiple choices with comma.) leave blank for en_US")
+if not VAL_KEYBOARDLAYOUT:
+    VAL_KEYBOARDLAYOUT = ["us"]
 
+# Prompt for mirror region input, with fallback to 'Worldwide' if left empty
+VAL_MIRROR = MultiSelectInputWindow("Choose your mirror: (The country's name is capitalized. separate multiple choices with comma.) leave blank for Worldwide")
+if not VAL_MIRROR:
+    VAL_MIRROR = ["Worldwide"]
+
+# Update configurations with user selections
+configs_dict["bootloader"] = VAL_BOOTLOADER if VAL_BOOTLOADER else configs_dict["bootloader"]
+configs_dict["debug"] = VAL_DEBUG
+configs_dict["keyboard-layout"] = VAL_KEYBOARDLAYOUT
+configs_dict["mirror-region"] = VAL_MIRROR
 
 print(configs_dict)
