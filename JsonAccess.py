@@ -1,7 +1,7 @@
 import json
 
 # Define the path to the JSON file
-file_path = 'config.json'
+file_path = 'configs.json'
 
 # Load JSON data from the file
 with open(file_path, 'r') as file:
@@ -24,9 +24,3 @@ def updateConfig(name, value):
     d[keys[-1]] = value
 
     saveConfig()  # Save changes immediately
-
-# Example usage
-updateConfig("dry_run", False)
-updateConfig("hostname", "production-box")
-updateConfig("timezone", "America/New_York")
-updateConfig("network_config.type", "static")  # Update a nested field

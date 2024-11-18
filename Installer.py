@@ -1,4 +1,5 @@
 import os
+from JsonAccess import updateConfig
 
 # Function to clear the screen for better readability
 def clear_screen():
@@ -88,6 +89,8 @@ configs_dict = {
 
 clear_screen()
 
+
+
 # Start of CLI interaction
 print_colored("Welcome to the Configuration Setup", "cyan")
 print("="*40)
@@ -113,12 +116,13 @@ if not VAL_KEYBOARDLAYOUT:
 VAL_MIRROR = MultiSelectInputWindow("Choose your mirror (The country's name is capitalized, separate multiple choices with comma.) leave blank for Worldwide")
 if not VAL_MIRROR:
     VAL_MIRROR = ["Worldwide"]
-
-# Update configurations with user selections
-configs_dict["bootloader"] = VAL_BOOTLOADER if VAL_BOOTLOADER else configs_dict["bootloader"]
-configs_dict["debug"] = VAL_DEBUG
-configs_dict["keyboard-layout"] = VAL_KEYBOARDLAYOUT
-configs_dict["mirror-region"] = VAL_MIRROR
+    
+VAL_SYSLANG = MultiSelectInputWindow("Choose your system's language/s. separate multiple choices with comma. (Example: en_US) leave blank for en_US.")
+if not VAL_SYSLANG:
+    VAL_SYSLANG = ["en_US"]
+VAL_TIMEZONE = SingleChoiceOptionWindow("Choose your timezone.", ["Europe/Stockholm"])
+if not VAL_TIMEZONE:
+    VAL_TIMEZONE = ["Europe/Stockholm"]
 
 # Final output
 clear_screen()
@@ -126,3 +130,20 @@ print_colored("Configuration Summary", "cyan")
 print("="*40)
 for key, value in configs_dict.items():
     print(f"{key.capitalize().replace('-', ' ')}: {value}")
+
+
+# Update configurations with user selections
+configs_dict["bootloader"] = VAL_BOOTLOADER if VAL_BOOTLOADER else configs_dict["bootloader"]
+configs_dict["debug"] = VAL_DEBUG
+configs_dict["keyboard-layout"] = VAL_KEYBOARDLAYOUT
+configs_dict["mirror-region"] = VAL_MIRROR
+configs_dict["sys-language"] = VAL_SYSLANG
+configs_dict["timezone"] = VAL_TIMEZONE
+
+for (i, j) in configs_dict.items():
+    updateConfig(i, j)
+    
+
+VAL_START = SingleChoiceOptionWindow("Ready to process the installation?", ["Yes", "No"])
+if VAL_START == "Yes":
+    os.system("archinstall --config configs.json")
