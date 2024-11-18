@@ -114,6 +114,11 @@ if not VAL_KEYBOARDLAYOUT:
 
 
 showDiskStatus()
+# Mirror region input
+VAL_DIR = MultiSelectInputWindow("Choose the directory you want to save your files in. /dev/sdX")
+if not VAL_MIRROR:
+    VAL_DIR = ["Worldwide"]
+
 
 # Mirror region input
 VAL_MIRROR = MultiSelectInputWindow("Choose your mirror (The country's name is capitalized, separate multiple choices with comma.) leave blank for Worldwide")
