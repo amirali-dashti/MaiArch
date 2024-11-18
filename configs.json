@@ -2,7 +2,7 @@
     "dry_run": true,
     "bootloader": "systemd-bootctl",
     "debug": false,
-    "harddrives": [
+    "disk_config": [
         "/dev/loop0"
     ],
     "hostname": "development-box",

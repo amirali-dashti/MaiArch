@@ -1,6 +1,6 @@
 import os
 from JsonAccess import updateConfig
-
+from DiskPreview import showDiskStatus
 # Function to clear the screen for better readability
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -77,7 +77,7 @@ def MultiSelectInputWindow(prompt):
 configs_dict = {
     "bootloader": "systemd-bootctl",
     "debug": False,
-    "harddrives": ["/dev/loop0"],  # Example of default value as a list
+    "disk_config": ["/dev/loop0"],  # Example of default value as a list
     "hostname": "development-box",
     "keyboard-layout": "us",
     "mirror-region": "Worldwide",
@@ -88,7 +88,6 @@ configs_dict = {
 }
 
 clear_screen()
-
 
 
 # Start of CLI interaction
@@ -107,10 +106,14 @@ VAL_DEBUG = SingleChoiceOptionWindow("Enable or disable debug mode. (False is re
 # Convert VAL_DEBUG to boolean
 VAL_DEBUG = True if VAL_DEBUG == "True" else False
 
+
 # Keyboard layout input
 VAL_KEYBOARDLAYOUT = MultiSelectInputWindow("Type your keyboard layouts (Example: en_US, separate multiple choices with comma.) leave blank for en_US")
 if not VAL_KEYBOARDLAYOUT:
     VAL_KEYBOARDLAYOUT = ["us"]
+
+
+showDiskStatus()
 
 # Mirror region input
 VAL_MIRROR = MultiSelectInputWindow("Choose your mirror (The country's name is capitalized, separate multiple choices with comma.) leave blank for Worldwide")
