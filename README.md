@@ -1,5 +1,4 @@
-# MaiArch
-## My AI Arch
+# MaiArch: My AI Arch
 
 ## A brief of this distribution
 
