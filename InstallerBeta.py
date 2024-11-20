@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from JsonAccess import updateConfig
+# from JsonAccess import updateConfig
 from DiskPreview import showDiskStatus
 from archinstall import Installer, ProfileConfiguration, profile_handler, User
 from archinstall.default_profiles.minimal import MinimalProfile
