@@ -34,7 +34,7 @@ pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting.";
 git clone "$REPO_URL" || { echo "Failed to clone repository. Exiting."; exit 1; }
 
 # Move custom installer script
-mv Installer.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
+mv InstallerBeta.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
 
 # Run the custom installer
 python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; exit 1; }

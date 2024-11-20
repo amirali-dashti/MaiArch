@@ -1,157 +1,218 @@
-import os
-from JsonAccess import updateConfig
-from DiskPreview import showDiskStatus
-# Function to clear the screen for better readability
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+from pathlib import Path
+from typing import Any, TYPE_CHECKING, Optional
+import subprocess
+import archinstall
+from archinstall import info, debug
+from archinstall import SysInfo
+from archinstall.lib import locale, disk
+from archinstall.lib.global_menu import GlobalMenu
+from archinstall.lib.configuration import ConfigurationOutput
+from archinstall.lib.installer import Installer
+from archinstall.lib.models import AudioConfiguration, Bootloader
+from archinstall.lib.models.network_configuration import NetworkConfiguration
+from archinstall.lib.profile.profiles_handler import profile_handler
+import logging
 
-# Function to print a colored message
-def print_colored(text, color="white"):
-    colors = {
-        "red": "\033[91m", 
-        "green": "\033[92m", 
-        "yellow": "\033[93m", 
-        "blue": "\033[94m", 
-        "purple": "\033[95m", 
-        "cyan": "\033[96m", 
-        "white": "\033[97m", 
-        "reset": "\033[0m"
-    }
-    print(f"{colors.get(color, colors['white'])}{text}{colors['reset']}")
+if TYPE_CHECKING:
+    _: Any
 
-def OptionWindow(text, options):
-    """
-    Displays a menu dialog with the provided text and options.
-    Returns the selected option or None if the dialog was canceled.
-    """
-    print_colored(text, "blue")
-    for i, option in enumerate(options, 1):
-        print(f"{i}. {option}")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
+# Constants for argument keys
+ARG_HELP = 'help'
+ARG_SILENT = 'silent'
+ARG_ADVANCED = 'advanced'
+ARG_DRY_RUN = 'dry_run'
+ARG_DISK_CONFIG = 'disk_config'
+ARG_LOCALE_CONFIG = 'locale_config'
+ARG_ROOT_PASSWORD = '!root-password'
+ARG_USERS = '!users'
+ARG_PROFILE_CONFIG = 'profile_config'
+ARG_AUDIO_CONFIG = 'audio_config'
+ARG_KERNE = 'kernels'
+ARG_NTP = 'ntp'
+ARG_PACKAGES = 'packages'
+ARG_BOOTLOADER = 'bootloader'
+ARG_MIRROR_CONFIG = 'mirror_config'
+ARG_NETWORK_CONFIG = 'network_config'
+ARG_TIMEZONE = 'timezone'
+ARG_SERVICES = 'services'
+ARG_CUSTOM_COMMANDS = 'custom-commands'
+ARG_ENCRYPTION = 'disk_encryption'
+ARG_SWAP = 'swap'
+ARG_UKI = 'uki'
+
+
+def exit_if_help_requested() -> None:
+    if archinstall.arguments.get(ARG_HELP):
+        print("See `man archinstall` for help.")
+        exit(0)
+
+
+def ask_user_questions() -> None:
+    """First, we'll ask the user for a bunch of user input."""
+    global_menu = GlobalMenu(data_store=archinstall.arguments)
     
-    while True:
-        try:
-            choice = int(input(f"\nSelect an option (1-{len(options)}): "))
-            if 1 <= choice <= len(options):
-                return options[choice - 1]
+    # Enable menu options
+    options_to_enable = [
+        'archinstall-language',
+        'mirror_config',
+        'locale_config',
+        'disk_config',  # mandatory=True
+        'disk_encryption',
+        'bootloader',
+        'uki',
+        'swap',
+        'hostname',
+        '!root-password',  # mandatory=True
+        '!users',  # mandatory=True
+        'profile_config',
+        'audio_config',
+        'kernels',  # mandatory=True
+        'packages',
+        'network_config',
+        'timezone',
+        'ntp',
+        '__separator__',
+        'save_config',
+        'install',
+        'abort'
+    ]
+    
+    for option in options_to_enable:
+        mandatory = option in ['disk_config', '!root-password', '!users', 'kernels']
+        global_menu.enable(option, mandatory=mandatory)
+
+    if archinstall.arguments.get(ARG_ADVANCED, False):
+        global_menu.enable('parallel downloads')
+
+    global_menu.run()
+
+
+def perform_installation(mountpoint: Path) -> None:
+    """Performs the installation steps on a block device."""
+    info('Starting installation...')
+    
+    disk_config: disk.DiskLayoutConfiguration = archinstall.arguments[ARG_DISK_CONFIG]
+    locale_config: locale.LocaleConfiguration = archinstall.arguments[ARG_LOCALE_CONFIG]
+    disk_encryption: disk.DiskEncryption = archinstall.arguments.get(ARG_ENCRYPTION, None)
+
+    enable_testing = 'testing' in archinstall.arguments.get('additional-repositories', [])
+    enable_multilib = 'multilib' in archinstall.arguments.get('additional-repositories', [])
+    run_mkinitcpio = not archinstall.arguments.get(ARG_UKI)
+
+    try:
+        with Installer(mountpoint, disk_config, disk_encryption=disk_encryption,
+                       kernels=archinstall.arguments.get(ARG_KERNE, ['linux'])) as installation:
+            if disk_config.config_type != disk.DiskLayoutType.Pre_mount:
+                installation.mount_ordered_layout()
+
+            installation.sanity_check()
+
+            if disk_encryption and disk_encryption.encryption_type != disk.EncryptionType.NoEncryption:
+                installation.generate_key_files()
+
+            if mirror_config := archinstall.arguments.get(ARG_MIRROR_CONFIG, None):
+                installation.set_mirrors(mirror_config, on_target=False)
+
+            installation.minimal_installation(
+                testing=enable_testing,
+                multilib=enable_multilib,
+                mkinitcpio=run_mkinitcpio,
+                hostname=archinstall.arguments.get('hostname', 'archlinux'),
+                locale_config=locale_config
+            )
+
+            if mirror_config:
+                installation.set_mirrors(mirror_config, on_target=True)
+
+            if archinstall.arguments.get(ARG_SWAP):
+                installation.setup_swap('zram')
+
+            if archinstall.arguments.get(ARG_BOOTLOADER) == Bootloader.Grub and SysInfo.has_uefi():
+                installation.add_additional_packages("grub")
+
+            installation.add_bootloader(
+                archinstall.arguments[ARG_BOOTLOADER],
+                archinstall.arguments.get(ARG_UKI, False)
+            )
+
+            network_config: Optional[NetworkConfiguration] = archinstall.arguments.get(ARG_NETWORK_CONFIG, None)
+            if network_config:
+                network_config.install_network_config(
+                    installation,
+                    archinstall.arguments.get(ARG_PROFILE_CONFIG, None)
+                )
+
+            if users := archinstall.arguments.get(ARG_USERS, None):
+                installation.create_users(users)
+
+            audio_config: Optional[AudioConfiguration] = archinstall.arguments.get(ARG_AUDIO_CONFIG, None)
+            if audio_config:
+                audio_config.install_audio_config(installation)
             else:
-                print_colored("Invalid selection. Please try again.", "red")
-        except ValueError:
-            print_colored("Invalid input. Please enter a number.", "red")
+                info("No audio server will be installed")
 
-def SingleChoiceOptionWindow(text, options):
-    """
-    Displays a single-choice menu and returns the selected option.
-    """
-    print_colored(text, "green")
-    for i, option in enumerate(options, 1):
-        print(f"{i}. {option}")
+            if packages := archinstall.arguments.get(ARG_PACKAGES, None):
+                installation.add_additional_packages(packages)
 
-    while True:
-        try:
-            choice = int(input(f"\nSelect an option (1-{len(options)}): "))
-            if 1 <= choice <= len(options):
-                return options[choice - 1]
-            else:
-                print_colored("Invalid selection. Please try again.", "red")
-        except ValueError:
-            print_colored("Invalid input. Please enter a number.", "red")
+            if profile_config := archinstall.arguments.get(ARG_PROFILE_CONFIG, None):
+                profile_handler.install_profile_config(installation, profile_config)
 
-def InputWindow(prompt):
-    """
-    Displays a prompt to receive a text entry from the user.
-    Returns the entered text or None if the dialog was canceled.
-    """
-    response = input(f"{prompt}: ")
-    return response.strip() if response.strip() else None
+            if timezone := archinstall.arguments.get(ARG_TIMEZONE, None):
+                installation.set_timezone(timezone)
 
-def MultiSelectInputWindow(prompt):
-    """
-    Displays a prompt to receive multiple comma-separated selections from the user.
-    Returns a list of selections or None if the dialog was canceled.
-    """
-    response = input(f"{prompt}: ")
-    if response.strip():
-        return [item.strip() for item in response.split(',') if item.strip()]
-    return None
+            if archinstall.arguments.get(ARG_NTP, False):
+                installation.activate_time_synchronization()
 
-configs_dict = {
-    "bootloader": "systemd-bootctl",
-    "debug": False,
-    "disk_config": ["/dev/loop0"],  # Example of default value as a list
-    "hostname": "development-box",
-    "keyboard-layout": "us",
-    "mirror-region": "Worldwide",
-    "sys-encoding": "utf-8",
-    "sys-language": "en_US",
-    "timezone": "Europe/Stockholm",
-    "packages": ["docker", "git", "wget", "zsh"]
-}
+            if archinstall.accessibility_tools_in_use():
+                installation.enable_espeakup()
 
-clear_screen()
+            if root_pw := archinstall.arguments.get(ARG_ROOT_PASSWORD, None):
+                installation.user_set_pw('root', root_pw)
+
+            if profile_config:
+                profile_config.profile.post_install(installation)
+
+            if services := archinstall.arguments.get(ARG_SERVICES, None):
+                installation.enable_service(services)
+
+            if custom_commands := archinstall.arguments.get(ARG_CUSTOM_COMMANDS, None):
+                archinstall.run_custom_user_commands(custom_commands, installation)
+
+            installation.genfstab()
+            info("For post-installation tips, see https://wiki.archlinux.org/index.php/Installation_guide#Post-installation")
+
+    except Exception as e:
+        logging.error(f"Installation failed: {e}")
+        exit(1)
+
+    debug(f"Disk states after installing: {disk.disk_layouts()}")
 
 
-# Start of CLI interaction
-print_colored("Welcome to the Configuration Setup", "cyan")
-print("="*40)
+exit_if_help_requested()
 
-# Prompt for GUI selection
-VAL_GUI = OptionWindow("Choose between these GUIs (gnome is recommended)", ["gnome"])
+if not archinstall.arguments.get(ARG_SILENT):
+    ask_user_questions()
 
-# Bootloader selection
-VAL_BOOTLOADER = SingleChoiceOptionWindow("Choose between these Bootloaders (grub is recommended)", ["grub", "systemd-bootctl"])
+config_output = ConfigurationOutput(archinstall.arguments)
 
-# Debug option
-VAL_DEBUG = SingleChoiceOptionWindow("Enable or disable debug mode. (False is recommended)", ["False", "True"])
+if not archinstall.arguments.get(ARG_SILENT):
+    config_output.show()
 
-# Convert VAL_DEBUG to boolean
-VAL_DEBUG = True if VAL_DEBUG == "True" else False
+config_output.save()
 
+if archinstall.arguments.get(ARG_DRY_RUN):
+    exit(0)
 
-# Keyboard layout input
-VAL_KEYBOARDLAYOUT = MultiSelectInputWindow("Type your keyboard layouts (Example: en_US, separate multiple choices with comma.) leave blank for en_US")
-if not VAL_KEYBOARDLAYOUT:
-    VAL_KEYBOARDLAYOUT = ["us"]
+if not archinstall.arguments.get(ARG_SILENT):
+    input(str(_('Press Enter to continue.')))
 
+fs_handler = disk.FilesystemHandler(
+    archinstall.arguments[ARG_DISK_CONFIG],
+    archinstall.arguments.get(ARG_ENCRYPTION, None)
+)
 
-showDiskStatus()
-# Mirror region input
-VAL_DIR = MultiSelectInputWindow("Choose the directory you want to save your files in. /dev/sdX")
-if not VAL_MIRROR:
-    VAL_DIR = ["Worldwide"]
-
-
-# Mirror region input
-VAL_MIRROR = MultiSelectInputWindow("Choose your mirror (The country's name is capitalized, separate multiple choices with comma.) leave blank for Worldwide")
-if not VAL_MIRROR:
-    VAL_MIRROR = ["Worldwide"]
-    
-VAL_SYSLANG = MultiSelectInputWindow("Choose your system's language/s. separate multiple choices with comma. (Example: en_US) leave blank for en_US.")
-if not VAL_SYSLANG:
-    VAL_SYSLANG = ["en_US"]
-VAL_TIMEZONE = SingleChoiceOptionWindow("Choose your timezone.", ["Europe/Stockholm"])
-if not VAL_TIMEZONE:
-    VAL_TIMEZONE = ["Europe/Stockholm"]
-
-# Final output
-clear_screen()
-print_colored("Configuration Summary", "cyan")
-print("="*40)
-for key, value in configs_dict.items():
-    print(f"{key.capitalize().replace('-', ' ')}: {value}")
-
-
-# Update configurations with user selections
-configs_dict["bootloader"] = VAL_BOOTLOADER if VAL_BOOTLOADER else configs_dict["bootloader"]
-configs_dict["debug"] = VAL_DEBUG
-configs_dict["keyboard-layout"] = VAL_KEYBOARDLAYOUT
-configs_dict["mirror-region"] = VAL_MIRROR
-configs_dict["sys-language"] = VAL_SYSLANG
-configs_dict["timezone"] = VAL_TIMEZONE
-
-for (i, j) in configs_dict.items():
-    updateConfig(i, j)
-    
-
-VAL_START = SingleChoiceOptionWindow("Ready to process the installation?", ["Yes", "No"])
-if VAL_START == "Yes":
-    os.system("archinstall --config configs.json")
+fs_handler.perform_filesystem_operations()
+perform_installation(archinstall.storage.get('MOUNT_POINT', Path('/mnt')))
