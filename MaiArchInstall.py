@@ -1,15 +1,5 @@
 from pathlib import Path
-from archinstall import (
-    FilesystemType,
-    select_disk_config,
-    DiskEncryptionMenu,
-    FilesystemHandler,
-    Installer,
-    ProfileConfiguration,
-    profile_handler,
-    MinimalProfile,
-    User
-)
+from archinstall import *
 import os
 
 
