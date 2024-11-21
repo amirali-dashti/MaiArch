@@ -13,6 +13,7 @@ from archinstall.lib.models.network_configuration import NetworkConfiguration
 from archinstall.lib.profile.profiles_handler import profile_handler
 import logging
 
+
 if TYPE_CHECKING:
     _: Any
 
