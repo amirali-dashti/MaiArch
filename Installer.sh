@@ -46,18 +46,18 @@ dialog --msgbox "Continuing with installing your side apps." 5 40
 
 dialog --msgbox "Starting with TuxTalk, MaiArch's AI assistant..." 5 40
 
-cd ¬/Downloads
-git clone https://github.com/devtracer/TuxTalk.git
-cd TuxTalk
-chmod +x ./Installer.sh
-./Installer.sh
+cd ¬/Downloads || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
+git clone https://github.com/devtracer/TuxTalk.git || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
+cd TuxTalk || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
+chmod +x ./Installer.sh || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
+./Installer.sh || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
 
 dialog --msgbox "Continuing with installing OmniPkg, MaiArch's default package manager..." 5 40
-cd ¬/Downloads
-git clone https://github.com/devtracer/OmniPkg.git
-cd OmniPkg
-chmod +x omnipkginstall.sh
-./omnipkginstall.sh
+cd ¬/Downloads || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
+git clone https://github.com/devtracer/OmniPkg.git || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
+cd OmniPkg || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
+chmod +x omnipkginstall.sh || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
+./omnipkginstall.sh || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
 
 dialog --msgbox "The installations's completed. Now we'll restart your device..." 5 40
 reboot
