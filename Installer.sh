@@ -52,7 +52,7 @@ show_error() {
 }
 
 # Install TuxTalk
-if git clone https://github.com/devtracer/TuxTalk.git && cd TuxTalk && chmod +x ./Installer.sh && ./Installer.sh; then
+if git clone https://github.com/devtracer/TuxTalk.git && cd TuxTalk && chmod +x ./TuxTalkInstall.sh && ./TuxTalkInstall.sh; then
     dialog --msgbox "TuxTalk has been installed successfully. Proceeding to install OmniPkg, MaiArch's default package manager..." 7 50
 else
     show_error "TuxTalk installation failed. Please check the errors and try again. For assistance, visit: https://www.github.com/devtracer/TuxTalk.git."
@@ -60,7 +60,7 @@ else
 fi
 
 # Install OmniPkg
-if git clone https://github.com/devtracer/OmniPkg.git && cd OmniPkg && chmod +x omnipkginstall.sh && ./omnipkginstall.sh; then
+if git clone https://github.com/devtracer/OmniPkg.git && cd OmniPkg && chmod +x Installation.sh && ./Installation.sh; then
     dialog --msgbox "The installation is complete. The system will now restart..." 7 50
     reboot
 else
