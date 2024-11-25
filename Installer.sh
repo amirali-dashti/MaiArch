@@ -39,7 +39,10 @@ git clone "$REPO_URL" || { echo "Failed to clone repository. Exiting."; exit 1; 
 mv Installer.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
 
 # Run the custom installer
-chmod +x * && python "$INSTALL_SCRIPT" || { echo "Custom installer script failed. Exiting."; exit 1; }
+
+chmod +x /usr/lib/python3.12 || { echo "MaiArch installer script failed. Exiting."; exit 1; }
+
+chmod +x * && python "$INSTALL_SCRIPT" || { echo "MaiArch installer script failed. Exiting."; exit 1; }
 
 # Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
