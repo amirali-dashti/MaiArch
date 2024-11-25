@@ -26,6 +26,8 @@ fi
 
 dialog --msgbox "Starting with TuxTalk, MaiArch's AI assistant..." 5 40
 
+pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
+
 # Function to handle dialog error messages
 show_error() {
     dialog --msgbox "$1\n\nError details:\n$(<error.log)" 15 70
