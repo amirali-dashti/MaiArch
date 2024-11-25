@@ -27,6 +27,8 @@ if ! dialog --title "MaiArch Installation Confirmation" \
   exit 1
 fi
 
+dialog --msgbox "Getting into the base installation process. Check https://github.com/devtracer/MaiArch.git for a guided tutorial." 80 80
+
 # Install required packages
 pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
 
