@@ -27,13 +27,19 @@ if ! dialog --title "MaiArch Installation Confirmation" \
   exit 1
 fi
 
-dialog --msgbox "Getting into the base installation process. Check https://github.com/devtracer/MaiArch.git for a guided tutorial." 80 80
+dialog --msgbox "Getting into the base installation process. Check https://github.com/devtracer/MaiArch.git for a guided tutorial." 5 40
 
 # Install required packages
 pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
 
 # Clone the archinstall repository
-git clone "$REPO_URL" || { echo "Failed to clone repository. Exiting."; exit 1; }
+#git clone "$REPO_URL" || { echo "Failed to clone repository. Exiting."; exit 1; }
+
+# Unpacking archinstall file
+
+pacman -Sy unzip || { echo "Failed to Unzip. Exiting."; exit 1; }
+
+unzip archinstall.zip || { echo "Failed to Unzip. Exiting."; exit 1; }
 
 # Move custom installer script
 mv Installer.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
