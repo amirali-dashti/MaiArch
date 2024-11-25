@@ -8,7 +8,7 @@ fi
 
 # Welcome Message
 dialog --title "Welcome to MaiArch Installation" \
---msgbox "WARNING: THIS OS IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Installer!" 5 40
+--msgbox "WARNING: THIS CODE IS EARLY RELEASE AND UNSTABLE. USE WITH CAUTION!\nWelcome to the MaiArch Installer!" 5 40
 
 # Check for dialog's existence (sonzai - existence)
 if ! command -v dialog &> /dev/null; then
