@@ -30,7 +30,7 @@ fi
 dialog --msgbox "Getting into the base installation process. Check https://github.com/devtracer/MaiArch.git for a guided tutorial." 5 40
 
 # Install required packages
-pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
+# pacman -Sy --noconfirm git || { echo "Failed to update/install 'git'. Exiting."; exit 1; }
 
 # Giving permission to all files, perchance the user didnt
 
