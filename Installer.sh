@@ -46,18 +46,24 @@ dialog --msgbox "Continuing with installing your side apps." 5 40
 
 dialog --msgbox "Starting with TuxTalk, MaiArch's AI assistant..." 5 40
 
-cd ¬/Downloads || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
-git clone https://github.com/devtracer/TuxTalk.git || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
-cd TuxTalk || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
-chmod +x ./Installer.sh || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
-./Installer.sh || { dialog --msgbox "TuxTalk's installation has failed. continuing." 5 40}
+# Function to handle dialog error messages
+show_error() {
+    dialog --msgbox "$1" 7 50
+}
 
-dialog --msgbox "Continuing with installing OmniPkg, MaiArch's default package manager..." 5 40
-cd ¬/Downloads || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
-git clone https://github.com/devtracer/OmniPkg.git || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
-cd OmniPkg || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
-chmod +x omnipkginstall.sh || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
-./omnipkginstall.sh || { dialog --msgbox "Omnipkg's installation has failed. continuing." 5 40}
+# Install TuxTalk
+if git clone https://github.com/devtracer/TuxTalk.git && cd TuxTalk && chmod +x ./Installer.sh && ./Installer.sh; then
+    dialog --msgbox "TuxTalk has been installed successfully. Proceeding to install OmniPkg, MaiArch's default package manager..." 7 50
+else
+    show_error "TuxTalk installation failed. Please check the errors and try again. For assistance, visit: https://www.github.com/devtracer/TuxTalk.git."
+    exit 1
+fi
 
-dialog --msgbox "The installations's completed. Now we'll restart your device..." 5 40
-reboot
+# Install OmniPkg
+if git clone https://github.com/devtracer/OmniPkg.git && cd OmniPkg && chmod +x omnipkginstall.sh && ./omnipkginstall.sh; then
+    dialog --msgbox "The installation is complete. The system will now restart..." 7 50
+    reboot
+else
+    show_error "OmniPkg installation failed. Please check the errors and try again. For assistance, visit: https://www.github.com/devtracer/OmniPkg.git."
+    exit 1
+fi
