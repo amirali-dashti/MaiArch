@@ -49,7 +49,7 @@ unzip archinstall.zip || { echo "Failed to Unzip. Exiting."; exit 1; }
 mv Installer.py "$INSTALL_SCRIPT" || { echo "Failed to move Installer.py. Exiting."; exit 1; }
 
 # Run the custom installer
-python "$INSTALL_SCRIPT" || { echo "MaiArch installer script failed. Exiting."; exit 1; }
+python3 "$INSTALL_SCRIPT" || { echo "MaiArch installer script failed. Exiting."; exit 1; }
 
 # Message and additional package installations
 dialog --msgbox "The base has been installed." 5 40
